@@ -25,6 +25,8 @@ function validateCreate(req, res, next) {
 
 router.post('/', createLimiter, validateCreate, controller.createProducto);
 router.get('/', controller.listProductos);
+// Rutas específicas deben ir antes de rutas con parámetros
+router.get('/catalogo/categorias', controller.getCategorias);
 router.get('/:codigo', controller.getProducto);
 router.put('/:codigo', controller.updateProducto);
 

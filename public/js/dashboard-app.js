@@ -2197,13 +2197,20 @@
     const btnApply = document.getElementById('productFilterApply');
 
     function populateCategoryOptions() {
-      const cats = (DASHBOARD_DATA.admin?.categorias?.list || []).map(c => c.name);
       if (!selCat) return;
       const current = selCat.value || '';
-      selCat.innerHTML = '<option value="">Todas</option>' + cats.map(n => `<option value="${n}">${n}</option>`).join('');
-      // restaurar seleccin previa si existe
-      const opt = Array.from(selCat.options).find(o => o.value === current);
-      if (opt) selCat.value = current;
+      // Traer del backend el catálogo real
+      fetch('/api/productos/catalogo/categorias')
+        .then(r => r.json())
+        .then(data => {
+          const cats = Array.isArray(data?.categorias) ? data.categorias : [];
+          selCat.innerHTML = '<option value="">Todas</option>' + cats.map(n => `<option value="${n}">${n}</option>`).join('');
+          const opt = Array.from(selCat.options).find(o => o.value === current);
+          if (opt) selCat.value = current;
+        })
+        .catch(() => {
+          // fallback: dejar opciones actuales sin romper
+        });
     }
 
     btnOpen?.addEventListener('click', () => {
@@ -2833,11 +2840,25 @@
       productsPager.pageSize = size;
     }
     const statusSel = document.getElementById('productFilterStatus');
-    const estado = statusSel?.value || '';
+    const catSel = document.getElementById('productFilterCategory');
+    const estadoUi = (statusSel?.value || '').toString().trim().toLowerCase();
+    // Mapear etiquetas de la UI -> valores en BD
+    let estado = '';
+    if (estadoUi === 'en stock') {
+      estado = 'Stock';
+    } else if (estadoUi === 'bajo stock') {
+      estado = 'Stock bajo';
+    } else if (estadoUi === 'agotado') {
+      estado = 'Sin existencias';
+    } else if (estadoUi === 'crítico' || estadoUi === 'critico') {
+      estado = 'Stock critico';
+    }
+    const categoria = catSel?.value || '';
     const params = new URLSearchParams({
       page: String(productsPager.page || 1),
       limit: String(productsPager.pageSize || 10),
-      estado
+      estado,
+      categoria
     });
     try {
       const resp = await fetch(`/api/productos?${params}`);

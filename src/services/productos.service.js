@@ -82,28 +82,40 @@ async function createProducto({ codigo, nombre, categorias = null, precioCosto, 
   };
 }
 
-async function listProductos({ page = 1, limit = 10, search = '', estado = '' }) {
+async function listProductos({ page = 1, limit = 10, search = '', estado = '', categoria = '' }) {
   const p = await getPool();
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
 
-  let where = 'WHERE 1=1';
+  const view = 'inv.v_productos';
+  const from = `FROM ${view} v`;
+  const whereParts = ['1=1'];
   const params = [];
   if (search && String(search).trim()) {
-    where += ' AND (Nombre LIKE @s OR Codigo LIKE @s)';
+    whereParts.push('(v.Nombre LIKE @s OR v.Codigo LIKE @s)');
     params.push({ name: 's', type: sql.VarChar(160), value: `%${String(search).trim()}%` });
   }
   if (estado && String(estado).trim()) {
-    where += ' AND Estado = @e';
+    whereParts.push('v.Estado = @e');
     params.push({ name: 'e', type: sql.VarChar(20), value: String(estado).trim() });
   }
+  if (categoria && String(categoria).trim()) {
+    // Filtro robusto: existencia en la relación M:N por nombre exacto
+    whereParts.push(`EXISTS (
+        SELECT 1
+        FROM inv.producto_categoria pc
+        JOIN inv.categorias c ON c.IdCategoria = pc.IdCategoria
+        WHERE pc.IdProducto = v.IdProducto AND c.Nombre = @c
+      )`);
+    params.push({ name: 'c', type: sql.VarChar(100), value: String(categoria).trim() });
+  }
+  const where = `WHERE ${whereParts.join(' AND ')}`;
 
-  const view = 'inv.v_productos';
   // Count desde la vista (incluye columnas agregadas como Categorias)
   const countReq = p.request();
   params.forEach(pr => countReq.input(pr.name, pr.type, pr.value));
-  const total = (await countReq.query(`SELECT COUNT(*) total FROM ${view} ${where}`)).recordset[0].total;
+  const total = (await countReq.query(`SELECT COUNT(*) total ${from} ${where}`)).recordset[0].total;
 
   // Page
   const dataReq = p.request();
@@ -111,11 +123,11 @@ async function listProductos({ page = 1, limit = 10, search = '', estado = '' })
   dataReq.input('offset', sql.Int, offset);
   dataReq.input('limit', sql.Int, limitNum);
   const rows = (await dataReq.query(`
-    SELECT IdProducto, Nombre, Codigo, Categorias, PrecioCosto, PrecioVenta, Cantidad, Estado
-    FROM ${view}
+    SELECT v.IdProducto, v.Nombre, v.Codigo, v.Categorias, v.PrecioCosto, v.PrecioVenta, v.Cantidad, v.Estado
+    ${from}
     ${where}
-    ORDER BY CASE WHEN (Categorias IS NULL OR LTRIM(RTRIM(Categorias)) = '') THEN 1 ELSE 0 END,
-             IdProducto DESC
+    ORDER BY CASE WHEN (v.Categorias IS NULL OR LTRIM(RTRIM(v.Categorias)) = '') THEN 1 ELSE 0 END,
+             v.IdProducto DESC
     OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
   `)).recordset;
 
@@ -155,6 +167,14 @@ async function getProductoByCodigo(codigo) {
     cantidad: Number(row.Cantidad),
     estado: row.Estado
   };
+}
+
+async function getCategorias() {
+  const p = await getPool();
+  const rows = (await p.request().query(`
+      SELECT Nombre FROM inv.categorias ORDER BY Nombre ASC
+  `)).recordset;
+  return rows.map(r => r.Nombre);
 }
 
 async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta, cantidad, categorias }) {
@@ -232,4 +252,4 @@ async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta
   return updated;
 }
 
-module.exports = { createProducto, listProductos, getProductoByCodigo, updateProductoByCodigo };
+module.exports = { createProducto, listProductos, getProductoByCodigo, updateProductoByCodigo, getCategorias };

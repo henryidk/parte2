@@ -15,8 +15,8 @@ async function createProducto(req, res) {
 
 async function listProductos(req, res) {
   try {
-    const { page = 1, limit = 10, search = '', estado = '' } = req.query;
-    const result = await service.listProductos({ page, limit, search, estado });
+    const { page = 1, limit = 10, search = '', estado = '', categoria = '' } = req.query;
+    const result = await service.listProductos({ page, limit, search, estado, categoria });
     return res.json({ success: true, ...result });
   } catch (err) {
     console.error('listProductos error:', err);
@@ -69,4 +69,14 @@ async function updateProducto(req, res) {
   }
 }
 
-module.exports = { createProducto, listProductos, getProducto, updateProducto };
+async function getCategorias(req, res) {
+  try {
+    const cats = await service.getCategorias();
+    return res.json({ success: true, categorias: cats });
+  } catch (err) {
+    console.error('getCategorias error:', err);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+}
+
+module.exports = { createProducto, listProductos, getProducto, updateProducto, getCategorias };
