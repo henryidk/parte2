@@ -1391,7 +1391,7 @@
     const end = Math.min(start + (window.repTablePager.pageSize || 10), window.repTablePager.total);
     const slice = list.slice(start, end);
     body.innerHTML = slice.map(row => `<tr>${(row || []).map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('');
-    if (infoEl) infoEl.textContent = `Mostrando ${start + 1}–${end} de ${window.repTablePager.total}`;
+    if (infoEl) infoEl.textContent = `Mostrando ${slice.length} de ${window.repTablePager.total}`;
     if (prevBtn) prevBtn.disabled = safePage <= 1;
     if (nextBtn) nextBtn.disabled = safePage >= maxPage;
   }
@@ -1911,7 +1911,7 @@
       </tr>
     `).join('');
 
-    if (infoEl) infoEl.textContent = `Mostrando ${start + 1}–${end} de ${invMovPager.total}`;
+    if (infoEl) infoEl.textContent = `Mostrando ${slice.length} de ${invMovPager.total}`;
     if (prevBtn) prevBtn.disabled = safePage <= 1;
     if (nextBtn) nextBtn.disabled = safePage >= maxPage;
   }
@@ -2310,7 +2310,8 @@
         `;
       }).join('');
 
-      if (pageInfo) pageInfo.textContent = `Mostrando ${total ? start + 1 : 0}${end} de ${total}`;
+      // Mostrar cantidad visible en la página vs total
+      if (pageInfo) pageInfo.textContent = `Mostrando ${end - start} de ${total}`;
       if (btnPrev) btnPrev.disabled = page <= 1;
       if (btnNext) btnNext.disabled = page >= maxPage;
     };
@@ -2578,7 +2579,8 @@
     const slice = categoryState.slice(start, end);
 
     buildCategoryGrid(grid, slice, { isAdmin });
-    if (infoEl) infoEl.textContent = `Mostrando ${start + 1}–${end} de ${total}`;
+    const shown = slice.length;
+    if (infoEl) infoEl.textContent = `Mostrando ${shown} de ${total}`;
     if (prevBtn) prevBtn.disabled = safePage <= 1;
     if (nextBtn) nextBtn.disabled = safePage >= maxPage;
   }
@@ -4225,7 +4227,7 @@
       </tr>
     `).join('');
 
-    if (infoEl) infoEl.textContent = `Mostrando ${start + 1}${end} de ${total}`;
+    if (infoEl) infoEl.textContent = `Mostrando ${slice.length} de ${total}`;
     if (prevBtn) prevBtn.disabled = safePage <= 1;
     if (nextBtn) nextBtn.disabled = safePage >= maxPage;
   }
@@ -4435,6 +4437,7 @@ window.resetReportBaseLayout = function () {
     ].join('');
   } catch (e) { }
 };
+
 
 
 
