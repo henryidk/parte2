@@ -3626,7 +3626,6 @@
             <i class="fas fa-ellipsis-vertical"></i>
           </button>
           <ul class="category-menu" data-category-menu data-category-id="${id}">
-            <li data-category-action="detail" data-category-id="${id}"><i class="fas fa-eye"></i> Ver detalle</li>
             <li data-category-action="edit" data-category-id="${id}"><i class="fas fa-pen"></i> Editar</li>
             <li data-category-action="delete" data-category-id="${id}"><i class="fas fa-trash"></i> Eliminar</li>
           </ul>
