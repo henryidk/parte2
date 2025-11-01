@@ -1,4 +1,4 @@
-const { getPool: getDbPool, sql } = require('../db/pool');
+﻿const { getPool: getDbPool, sql } = require('../db/pool');
 
 // Pool de BD centralizado en ../db/pool (getDbPool)
 
@@ -15,7 +15,7 @@ async function createProducto({ codigo, nombre, categorias = null, precioCosto, 
   const exists = await p.request().input('Codigo', sql.VarChar(50), finalCode)
     .query('SELECT 1 FROM inv.productos WHERE Codigo = @Codigo');
   if (exists.recordset.length > 0) {
-    const e = new Error('Código ya existe');
+    const e = new Error('CÃ³digo ya existe');
     e.code = 'PRODUCT_CODE_EXISTS';
     throw e;
   }
@@ -38,7 +38,7 @@ async function createProducto({ codigo, nombre, categorias = null, precioCosto, 
     FROM inv.productos WHERE Codigo = @Codigo
   `)).recordset[0];
 
-  // Bitácora (opcional)
+  // BitÃ¡cora (opcional)
   try {
     await p.request()
       .input('Usuario', sql.VarChar(50), usuarioEjecutor || 'sistema')
@@ -84,17 +84,17 @@ async function listProductos({ page = 1, limit = 10, search = '', estado = '', c
   if (categoria && String(categoria).trim()) {
     const cval = String(categoria).trim();
     if (cval === '__NONE__') {
-      // Productos sin categorías asociadas (relación M:N)
+      // Productos sin categorÃ­as asociadas (relaciÃ³n M:N)
       whereParts.push(`NOT EXISTS (
           SELECT 1 FROM inv.producto_categoria pc WHERE pc.IdProducto = v.IdProducto
         )`);
     } else {
-      // Filtro robusto: existencia en la relación M:N por nombre exacto
+      // Filtro robusto: existencia en la relaciÃ³n M:N por nombre exacto
       whereParts.push(`EXISTS (
           SELECT 1
           FROM inv.producto_categoria pc
           JOIN inv.categorias c ON c.IdCategoria = pc.IdCategoria
-          WHERE pc.IdProducto = v.IdProducto AND c.Nombre = @c
+          WHERE pc.IdProducto = v.IdProducto AND LOWER(CONVERT(VARCHAR(100), c.Nombre COLLATE Latin1_General_CI_AI)) = LOWER(CONVERT(VARCHAR(100), @c COLLATE Latin1_General_CI_AI))
         )`);
       params.push({ name: 'c', type: sql.VarChar(100), value: cval });
     }
@@ -142,7 +142,7 @@ async function getProductoByCodigo(codigo) {
             FROM ${view} WHERE Codigo = @Codigo`);
   if (r.recordset.length === 0) return null;
   const row = r.recordset[0];
-  // Normalizar categorías a array
+  // Normalizar categorÃ­as a array
   const cats = (row.Categorias && typeof row.Categorias === 'string')
     ? row.Categorias.split(/[;|,]/).map(s => s.trim()).filter(Boolean)
     : [];
@@ -235,7 +235,7 @@ async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta
   }
   const idProd = prod.recordset[0].IdProducto;
 
-  // Actualizar campos básicos si vienen
+  // Actualizar campos bÃ¡sicos si vienen
   const setParts = [];
   const reqUpd = p.request();
   reqUpd.input('IdProducto', sql.Int, idProd);
@@ -244,7 +244,7 @@ async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta
   if (precioVenta != null) { setParts.push('PrecioVenta = @PrecioVenta'); reqUpd.input('PrecioVenta', sql.Decimal(18,2), Number(precioVenta)); }
   if (cantidad != null) { setParts.push('Cantidad = @Cantidad'); reqUpd.input('Cantidad', sql.Int, Number(cantidad)); }
 
-  // Si vienen categorías, sincronizar relación M:N
+  // Si vienen categorÃ­as, sincronizar relaciÃ³n M:N
   let finalCats = null;
   if (Array.isArray(categorias)) {
     // Mapear nombres a IdCategoria
@@ -278,7 +278,7 @@ async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta
       }
       finalCats = names; // Para reflejar en columna de texto
     } else {
-      // Si viene array vacío, limpiar asociaciones
+      // Si viene array vacÃ­o, limpiar asociaciones
       await p.request().input('IdProducto', sql.Int, idProd)
         .query('DELETE FROM inv.producto_categoria WHERE IdProducto=@IdProducto');
       finalCats = [];
@@ -319,7 +319,7 @@ async function deleteProductoByCodigo(codigo) {
   await p.request().input('IdProducto', sql.Int, idProd)
     .query('DELETE FROM inv.productos WHERE IdProducto = @IdProducto');
 
-  // Bitácora (best-effort)
+  // BitÃ¡cora (best-effort)
   try {
     await p.request()
       .input('Usuario', sql.VarChar(50), 'sistema')
@@ -336,3 +336,4 @@ async function deleteProductoByCodigo(codigo) {
 }
 
 module.exports = { createProducto, listProductos, getProductoByCodigo, updateProductoByCodigo, getCategorias, deleteProductoByCodigo, createCategoria, getCategoriasDetalle };
+

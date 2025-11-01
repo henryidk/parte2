@@ -1024,3 +1024,19 @@ body.dashboard-body.dark-theme .pie-chart { border-color:#0f172a; }
   color: #64748b;
   font-size: 13px;
 }
+/* Ancho mayor para el modal de productos por categoría */
+#categoryProductsModal .modal-container {
+  max-width: 960px;
+  width: 96%;
+}
+
+/* Evitar scroll horizontal en tabla del modal */
+#categoryProductsModal .table-responsive {
+  overflow-x: visible;
+}
+
+/* Ajustes de celdas para caber mejor */
+#categoryProductsModal table.data-table th,
+#categoryProductsModal table.data-table td {
+  white-space: nowrap;
+}

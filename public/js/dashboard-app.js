@@ -908,7 +908,7 @@
     const count = category.productsCount ?? 0;
 
     if (titleEl) titleEl.textContent = category.name;
-    if (messageEl) messageEl.textContent = 'A continuacin se muestran los productos asociados a esta categora.';
+    if (messageEl) messageEl.textContent = '';
     if (helperEl) {
       helperEl.textContent = count === 0
         ? 'An no hay productos registrados.'
@@ -946,31 +946,31 @@
     const prevBtn = document.getElementById('categoryProductsPrev');
     const nextBtn = document.getElementById('categoryProductsNext');
 
-    const listForCategory = getProductsForCategory(category.name);
     const defaultSize = Number(pageSizeSelect?.value || 10) || 10;
     categoryProductsState = {
-      items: listForCategory,
+      items: [],
       page: 1,
       pageSize: defaultSize,
-      total: listForCategory.length,
+      total: 0,
       name: category.name
     };
 
-    renderCategoryProductsPage();
+    // Cargar desde backend los productos asociados a la categoría
+    fetchCategoryProductsPage();
 
     if (pageSizeSelect) {
       pageSizeSelect.onchange = () => {
         const newSize = Number(pageSizeSelect.value) || 10;
         categoryProductsState.pageSize = newSize;
         categoryProductsState.page = 1;
-        renderCategoryProductsPage();
+        fetchCategoryProductsPage();
       };
     }
     if (prevBtn) {
       prevBtn.onclick = () => {
         if (categoryProductsState.page > 1) {
           categoryProductsState.page -= 1;
-          renderCategoryProductsPage();
+          fetchCategoryProductsPage();
         }
       };
     }
@@ -979,12 +979,87 @@
         const maxPage = Math.max(1, Math.ceil(categoryProductsState.total / categoryProductsState.pageSize));
         if (categoryProductsState.page < maxPage) {
           categoryProductsState.page += 1;
-          renderCategoryProductsPage();
+          fetchCategoryProductsPage();
         }
       };
     }
 
     modalManager.open('categoryProductsModal');
+  }
+
+  async function fetchCategoryProductsPage() {
+    const bodyEl = document.getElementById('categoryProductsBody');
+    const infoEl = document.getElementById('categoryProductsPageInfo');
+    const prevBtn = document.getElementById('categoryProductsPrev');
+    const nextBtn = document.getElementById('categoryProductsNext');
+    if (!bodyEl) return;
+
+    const page = categoryProductsState.page || 1;
+    const limit = categoryProductsState.pageSize || 10;
+    const cat = categoryProductsState.name || '';
+
+    // Mostrar loading liviano
+    bodyEl.innerHTML = '<tr><td colspan="6"><div class="loading-row"><i class="fas fa-spinner fa-pulse"></i> Cargando...</div></td></tr>';
+
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit), categoria: cat });
+      const resp = await fetch(`/api/productos?${params.toString()}`);
+      const data = await resp.json();
+      if (!resp.ok || !data?.success) throw new Error(data?.message || `Error HTTP ${resp.status}`);
+
+      const rows = (data.data || []).map(r => {
+        const rawCats = r.Categorias ?? r.categorias ?? '';
+        const categories = Array.isArray(rawCats)
+          ? rawCats
+          : (typeof rawCats === 'string'
+              ? rawCats.split(/[;|,]/).map(s => s.trim()).filter(Boolean)
+              : []);
+        return {
+          code: r.Codigo || r.codigo,
+          name: r.Nombre || r.nombre,
+          categories,
+          cost: formatMoney(Number(r.PrecioCosto ?? r.precioCosto ?? 0)),
+          price: formatMoney(Number(r.PrecioVenta ?? r.precioVenta ?? 0)),
+          status: r.Estado || r.estado || 'En stock'
+        };
+      });
+
+      categoryProductsState.items = rows;
+      categoryProductsState.total = data.pagination?.totalItems || (rows.length || 0);
+
+      // Render tabla
+      if (rows.length === 0) {
+        bodyEl.innerHTML = '<tr><td colspan="6"><p class="empty-state">No hay productos asociados a esta categoria.</p></td></tr>';
+      } else {
+        bodyEl.innerHTML = rows.map(p => `
+          <tr>
+            <td>${p.code}</td>
+            <td>${p.name}</td>
+            <td>${(p.categories || []).map(cat => `<span class="tag">${cat}</span>`).join(' ')}</td>
+            <td>${p.cost}</td>
+            <td>${p.price}</td>
+            <td><span class="status-chip ${p.status === 'Activo' ? 'success' : 'warning'}">${p.status}</span></td>
+          </tr>
+        `).join('');
+      }
+
+      // Pager info y botones
+      if (infoEl) {
+        const start = rows.length ? ((page - 1) * limit) + 1 : 0;
+        const end = rows.length ? (start + rows.length - 1) : 0;
+        infoEl.textContent = `Mostrando ${start}-${end} de ${categoryProductsState.total}`;
+      }
+      if (prevBtn) prevBtn.disabled = page <= 1;
+      const maxPage = Math.max(1, Math.ceil(categoryProductsState.total / limit));
+      if (nextBtn) nextBtn.disabled = page >= maxPage;
+
+    } catch (err) {
+      console.error('Error cargando productos por categoria:', err);
+      bodyEl.innerHTML = '<tr><td colspan="6"><p class="empty-state">No se pudo cargar la lista de productos.</p></td></tr>';
+      if (infoEl) infoEl.textContent = 'Mostrando 0-0 de 0';
+      if (prevBtn) prevBtn.disabled = true;
+      if (nextBtn) nextBtn.disabled = true;
+    }
   }
 
   function openCategoryDetail(categoryId) {
@@ -2232,6 +2307,7 @@
     });
 
     btnClear?.addEventListener('click', () => {
+      productsForcedCategory = '';
       if (selCat) selCat.selectedIndex = 0;
       if (selStatus) selStatus.selectedIndex = 0;
       productsPager.page = 1;
@@ -2922,6 +2998,9 @@
     return 'success';
   }
 
+  // Refuerzos de filtrado para catálogo de productos
+  let productsForcedCategory = '';
+
   // Refresca la tabla de productos combinando base + agregados en memoria
   async function refreshProductTable() {
     const tbody = document.querySelector('#productTable tbody');
@@ -2948,7 +3027,8 @@
     } else if (estadoUi === 'crítico' || estadoUi === 'critico') {
       estado = 'Stock critico';
     }
-    const categoria = catSel?.value || '';
+    // Usar categoría forzada (cuando venimos desde "Ver en productos") si existe
+    const categoria = (productsForcedCategory || (catSel?.value || '')).toString();
     const params = new URLSearchParams({
       page: String(productsPager.page || 1),
       limit: String(productsPager.pageSize || 10),
@@ -3028,8 +3108,21 @@
 
   // Versión con paginación: aplica filtro de categoría y re-renderiza tabla principal
   function applyProductsCategoryFilterPaged(categoryName) {
+    const name = (categoryName || '').toString().trim();
+    productsForcedCategory = name; // forzar en próxima carga
     const selCat = document.getElementById('productFilterCategory');
-    if (selCat) selCat.value = categoryName || '';
+    const statusSel = document.getElementById('productFilterStatus');
+    if (statusSel) statusSel.selectedIndex = 0; // limpiar estado para no interferir
+    if (selCat) {
+      // Asegurar opción existente o inyectarla si no está
+      let opt = Array.from(selCat.options || []).find(o => (o.value || '') === name);
+      if (!opt && name) {
+        const o = document.createElement('option');
+        o.value = name; o.textContent = name;
+        selCat.appendChild(o);
+      }
+      selCat.value = name || '';
+    }
     productsPager.page = 1;
     refreshProductTable();
   }
