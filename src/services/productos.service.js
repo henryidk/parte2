@@ -166,6 +166,36 @@ async function getCategorias() {
   return rows.map(r => r.Nombre);
 }
 
+async function createCategoria({ nombre, identificador = '', descripcion = '' }) {
+  const p = await getDbPool();
+  const name = String(nombre || '').trim();
+  const ident = String(identificador || '').trim();
+  const descr = String(descripcion || '').trim();
+
+  // Duplicado por nombre (case-insensitive)
+  const dup = await p.request()
+    .input('Nombre', sql.VarChar(150), name)
+    .query('SELECT 1 FROM inv.categorias WHERE LOWER(Nombre) = LOWER(@Nombre)');
+  if (dup.recordset.length > 0) { const e = new Error('Categoria existente'); e.code = 'CATEGORY_EXISTS'; throw e; }
+
+  // Detectar columnas opcionales
+  const meta = await p.request().query("SELECT name FROM sys.columns WHERE object_id = OBJECT_ID('inv.categorias')");
+  const colNames = new Set(meta.recordset.map(r => (r.name || '').toString().toLowerCase()));
+  const hasDescripcion = colNames.has('descripcion');
+  const slugCol = ['identificador','slug','codigo','idexterno'].find(c => colNames.has(c));
+
+  // Construir INSERT dinamico seguro
+  const cols = ['Nombre'];
+  const values = ['@Nombre'];
+  const req = p.request();
+  req.input('Nombre', sql.VarChar(150), name);
+  if (hasDescripcion && descr) { cols.push('Descripcion'); values.push('@Descripcion'); req.input('Descripcion', sql.NVarChar(300), descr); }
+  if (slugCol && ident) { cols.push(slugCol); values.push('@Ident'); req.input('Ident', sql.VarChar(150), ident); }
+  await req.query(`INSERT INTO inv.categorias (${cols.join(',')}) VALUES (${values.join(',')})`);
+
+  return { nombre: name, identificador: ident, descripcion: descr };
+}
+
 async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta, cantidad, categorias }) {
   const p = await getDbPool();
   const code = String(codigo || '').trim();
@@ -277,4 +307,4 @@ async function deleteProductoByCodigo(codigo) {
   return { codigo: code, id: idProd };
 }
 
-module.exports = { createProducto, listProductos, getProductoByCodigo, updateProductoByCodigo, getCategorias, deleteProductoByCodigo };
+module.exports = { createProducto, listProductos, getProductoByCodigo, updateProductoByCodigo, getCategorias, deleteProductoByCodigo, createCategoria };

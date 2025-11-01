@@ -858,20 +858,30 @@
       return;
     }
 
-    const newId = generateUniqueCategoryId(name);
-    const newCategory = {
-      id: newId,
-      slug: newId,
-      name,
-      description,
-      color: getRandomCategoryColor(),
-      productsCount: 0
-    };
+    // Persistir en backend
+    const slugField = document.getElementById('categorySlug');
+    const identificador = (slugField?.value || '').trim();
+    fetch('/api/productos/catalogo/categorias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre: name, identificador, descripcion: description })
+    })
+    .then(async resp => {
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.success) throw new Error(data.message || `Error HTTP ${resp.status}`);
 
-    categoryState.push(newCategory);
-    renderCategorias();
-    showToast('Categora creada correctamente.', 'success');
-    modalManager.close('categoryModal');
+      // Actualizar UI localmente (mantener color y conteo)
+      const newId = generateUniqueCategoryId(name);
+      const newCategory = { id: newId, slug: newId, name, description, color: getRandomCategoryColor(), productsCount: 0 };
+      categoryState.push(newCategory);
+      renderCategorias();
+      showToast('Categoria creada correctamente.', 'success');
+      modalManager.close('categoryModal');
+    })
+    .catch(err => {
+      console.error('Error creando categoria:', err);
+      setCategoryFormMessage('error', err.message || 'No se pudo crear la categoria');
+    });
   }
 
   function openCategoryProducts(categoryId) {
