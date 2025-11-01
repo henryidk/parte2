@@ -1,4 +1,4 @@
-const sql = require('mssql/msnodesqlv8');
+const { getPool: getDbPool, sql } = require('../db/pool');
 
 // Construir cadena de conexión desde env (igual que server)
 const dbServer = process.env.DB_SERVER || 'localhost\\SQLEXPRESS';
@@ -29,7 +29,7 @@ function generateCode(nombre) {
 
 async function createProducto({ codigo, nombre, categorias = null, precioCosto, precioVenta, cantidad = 0, usuarioEjecutor = 'sistema' }) {
   const finalCode = (codigo && typeof codigo === 'string' && codigo.trim()) ? codigo.trim() : generateCode(nombre);
-  const p = await getPool();
+  const p = await getDbPool();
 
   const exists = await p.request().input('Codigo', sql.VarChar(50), finalCode)
     .query('SELECT 1 FROM inv.productos WHERE Codigo = @Codigo');
@@ -83,7 +83,7 @@ async function createProducto({ codigo, nombre, categorias = null, precioCosto, 
 }
 
 async function listProductos({ page = 1, limit = 10, search = '', estado = '', categoria = '' }) {
-  const p = await getPool();
+  const p = await getDbPool();
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
@@ -153,7 +153,7 @@ async function listProductos({ page = 1, limit = 10, search = '', estado = '', c
 }
 
 async function getProductoByCodigo(codigo) {
-  const p = await getPool();
+  const p = await getDbPool();
   const view = 'inv.v_productos';
   const r = await p.request()
     .input('Codigo', sql.VarChar(50), String(codigo || '').trim())
@@ -178,7 +178,7 @@ async function getProductoByCodigo(codigo) {
 }
 
 async function getCategorias() {
-  const p = await getPool();
+  const p = await getDbPool();
   const rows = (await p.request().query(`
       SELECT Nombre FROM inv.categorias ORDER BY Nombre ASC
   `)).recordset;
@@ -186,7 +186,7 @@ async function getCategorias() {
 }
 
 async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta, cantidad, categorias }) {
-  const p = await getPool();
+  const p = await getDbPool();
   const code = String(codigo || '').trim();
   // Obtener IdProducto
   const prod = await p.request().input('Codigo', sql.VarChar(50), code)

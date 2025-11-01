@@ -8,7 +8,7 @@ const { sendBrevoEmail } = require('./src/services/email.service');
 
 
 const express = require('express');
-const sql = require('mssql/msnodesqlv8');
+const { getPool, sql, closePool } = require('./src/db/pool');
 const path = require('path');
 require('dotenv').config();
 
@@ -43,7 +43,8 @@ const dbConfig = {
 };
 
 
-let pool;
+// Uso de pool compartido vía getPool()
+let pool; // declarado solo para compatibilidad con manejadores antiguos
 //LOGIN
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/index.html'));
@@ -70,10 +71,7 @@ app.post('/api/login', verifyRecaptcha, async (req, res) => {
       });
     }
 
-    if (!pool) {
-      pool = await sql.connect(dbConfig);
-    }
-
+    const pool = await getPool();
     const request = pool.request();
     request.input('Usuario', sql.VarChar(50), usuario);
     request.input('Password', sql.NVarChar(200), password);
@@ -117,10 +115,7 @@ app.get('/api/dashboard-stats', async (req, res) => {
     try {
         console.log('📊 Obteniendo estadísticas del dashboard...');
 
-        if (!pool) {
-            pool = await sql.connect(dbConfig);
-        }
-
+        const pool = await getPool();
         const [usuariosTotal, usuariosActivos, accesosOKHoy, accesosFailHoy, ultimosAccesos] = await Promise.all([
             pool.request().query('SELECT COUNT(*) AS total FROM seg.tbUsuario'),
             pool.request().query('SELECT COUNT(*) AS activos FROM seg.tbUsuario WHERE Estado = 1'),
@@ -296,9 +291,7 @@ app.post('/api/usuarios/cambiar-password', async (req, res) => {
         }
 
         // Conectar a la base de datos
-        if (!pool) {
-            pool = await sql.connect(dbConfig);
-        }
+        const pool = await getPool();
 
         // Construir request base (parámetros coinciden con ambos SPs)
         const makeRequest = () => {
@@ -532,9 +525,7 @@ app.delete('/api/usuarios/:id', async (req, res) => {
         }
 
         // Conectar a la base de datos
-        if (!pool) {
-            pool = await sql.connect(dbConfig);
-        }
+        const pool = await getPool();
 
         // 1) Verificar que el ejecutor sea admin activo
         const execCheck = await pool.request()
@@ -607,9 +598,7 @@ app.put('/api/usuarios/:id', async (req, res) => {
         }
 
         // Conectar a la base de datos
-        if (!pool) {
-            pool = await sql.connect(dbConfig);
-        }
+        const pool = await getPool();
 
         // Obtener el nombre de usuario actual para pasarlo al SP
         const userQuery = await pool.request()
@@ -689,9 +678,7 @@ app.post('/api/usuarios/:id/reset-password', async (req, res) => {
         }
 
         // Conectar a la base de datos
-        if (!pool) {
-            pool = await sql.connect(dbConfig);
-        }
+        const pool = await getPool();
 
         // Obtener datos del usuario a resetear
         const userQuery = await pool.request()
@@ -786,9 +773,7 @@ app.post('/api/usuarios/:id/disable', async (req, res) => {
         }
 
         // Conectar a la base de datos
-        if (!pool) {
-            pool = await sql.connect(dbConfig);
-        }
+        const pool = await getPool();
 
         await pool.request()
             .input('IdUsuario', sql.Int, userId)
@@ -876,9 +861,7 @@ app.get('/api/bitacora/accesos', async (req, res) => {
             rol = '', usuario = '', estado = '', fechaInicio = '', fechaFin = '',
             page = 1, limit = 10
         } = req.query;
-
-        if (!pool) pool = await sql.connect(dbConfig);
-
+        const pool = await getPool();
         let where = 'WHERE 1=1';
         const r = pool.request();
 
@@ -971,9 +954,7 @@ app.get('/api/bitacora/transacciones', async (req, res) => {
             usuario = '', accion = '', tabla = '', fechaInicio = '', fechaFin = '',
             page = 1, limit = 10
         } = req.query;
-
-        if (!pool) pool = await sql.connect(dbConfig);
-
+        const pool = await getPool();
         let where = 'WHERE 1=1';
         const r = pool.request();
 
@@ -1071,11 +1052,7 @@ app.post('/api/forgot-password', verifyRecaptcha, async (req, res) => {
                 message: 'El correo electrónico es requerido'
             });
         }
-
-        if (!pool) {
-            pool = await sql.connect(dbConfig);
-        }
-
+        const pool = await getPool();
         const request = pool.request();
         request.input('Correo', sql.VarChar(120), email);
         request.output('PasswordTemporal', sql.NVarChar(200));
@@ -1147,8 +1124,8 @@ app.post('/api/forgot-password', verifyRecaptcha, async (req, res) => {
 async function startServer() {
     try {
         // Probar conexión a la base de datos
-        console.log('Conectando a SQL Server con:', dbConfig.connectionString);
-        pool = await sql.connect(dbConfig);
+        console.log('Conectando a SQL Server...');
+        await getPool();
         console.log('✅ Conexión a SQL Server establecida');
 
         // Iniciar servidor
