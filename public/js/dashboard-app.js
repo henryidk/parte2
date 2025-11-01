@@ -1009,7 +1009,7 @@
     if (nameEl) nameEl.textContent = category.name;
     const count = category.productsCount ?? 0;
     if (productsEl) productsEl.textContent = `${count} ${count === 1 ? 'producto asociado' : 'productos asociados'}`;
-    if (descriptionEl) descriptionEl.textContent = category.description || 'Sin descripcin registrada.';
+    if (descriptionEl) descriptionEl.textContent = category.description || 'Sin descripcion registrada.';
     if (colorEl) colorEl.style.background = category.color || '#3b82f6';
     if (detailActions) {
       detailActions.style.display = role === 'admin' ? 'flex' : 'none';
@@ -2514,10 +2514,34 @@
     const createBtn = document.getElementById('newCategoryBtn');
     if (!grid) return;
 
-    if (!Array.isArray(categoryState) || categoryState.length === 0) {
-      const base = Array.isArray(data?.list) ? data.list.map((item, index) => normalizeCategory(item, index)) : [...initialCategories];
-      categoryState = base;
-    }
+    // Cargar SIEMPRE desde backend para mostrar datos reales
+    fetch('/api/productos/catalogo/categorias/detalle')
+      .then(r => r.json())
+      .then(d => {
+        const arr = Array.isArray(d?.categorias) ? d.categorias : [];
+        categoryState = arr.map((c, index) => ({
+          id: String(c.id ?? c.IdCategoria ?? (index + 1)),
+          name: c.name ?? c.Nombre,
+          description: c.description ?? c.Descripcion ?? '',
+          identificador: c.identificador ?? c.Identificador ?? '',
+          productsCount: Number(c.productsCount ?? c.ProductsCount ?? 0),
+          color: getRandomCategoryColor()
+        }));
+        const isAdmin = role === 'admin';
+        categoriesPager.page = 1;
+        categoriesPager.total = categoryState.length;
+        renderCategoriesPage({ isAdmin });
+      })
+      .catch(() => {
+        // Fallback a datos iniciales si el backend no responde
+        const base = Array.isArray(data?.list) ? data.list.map((item, index) => normalizeCategory(item, index)) : [...initialCategories];
+        categoryState = base;
+        const isAdmin = role === 'admin';
+        categoriesPager.page = 1;
+        categoriesPager.total = categoryState.length;
+        renderCategoriesPage({ isAdmin });
+      });
+    return;
 
     const isAdmin = role === 'admin';
     grid.classList.toggle('read-only', !isAdmin);
@@ -3476,10 +3500,11 @@
     container.innerHTML = categories.map(category => {
       const id = category.id;
       const name = escapeHtml(category.name);
-      const description = category.description ? escapeHtml(category.description) : 'Sin descripcin registrada.';
+      const description = category.description ? escapeHtml(category.description) : 'Sin descripcion registrada.';
       const count = category.productsCount ?? 0;
       const productsLabel = `${count} ${count === 1 ? 'producto' : 'productos'}`;
       const badgeText = escapeHtml(`ID: ${category.id}`);
+      const ident = category.identificador ? escapeHtml(String(category.identificador)) : ''; 
 
       const menu = isAdmin ? `
           <button class="category-menu-btn" data-category-action="toggleMenu" data-category-id="${id}">
@@ -3505,7 +3530,10 @@
             ${menu}
           </div>
           <p>${description}</p>
-          <span class="badge badge-neutral">${badgeText}</span>
+          <div class="badge-wrap" style="display:flex; gap:8px; flex-wrap:wrap;">
+            <span class="badge badge-neutral">${badgeText}</span>
+            ${ident ? `<span class="badge badge-outline">Ident: ${ident}</span>` : ''}
+          </div>
         </article>
       `;
     }).join('');

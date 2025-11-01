@@ -27,6 +27,7 @@ router.post('/', createLimiter, validateCreate, controller.createProducto);
 router.get('/', controller.listProductos);
 // Rutas específicas deben ir antes de rutas con parámetros
 router.get('/catalogo/categorias', controller.getCategorias);
+router.get('/catalogo/categorias/detalle', controller.getCategoriasDetalle);
 router.post('/catalogo/categorias', controller.createCategoria);
 router.get('/:codigo', controller.getProducto);
 router.put('/:codigo', controller.updateProducto);

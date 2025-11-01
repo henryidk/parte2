@@ -196,6 +196,34 @@ async function createCategoria({ nombre, identificador = '', descripcion = '' })
   return { nombre: name, identificador: ident, descripcion: descr };
 }
 
+async function getCategoriasDetalle() {
+  const p = await getDbPool();
+  // Detectar columnas opcionales de inv.categorias
+  const meta = await p.request().query("SELECT name FROM sys.columns WHERE object_id = OBJECT_ID('inv.categorias')");
+  const colNames = new Set(meta.recordset.map(r => (r.name || '').toString().toLowerCase()));
+  const hasDescripcion = colNames.has('descripcion');
+  const slugCol = ['identificador','slug','codigo','idexterno'].find(c => colNames.has(c));
+
+  const selectCols = ["c.IdCategoria AS IdCategoria", "c.Nombre AS Nombre"];
+  const groupCols = ["c.IdCategoria", "c.Nombre"];
+  if (hasDescripcion) { selectCols.push("c.Descripcion AS Descripcion"); groupCols.push("c.Descripcion"); }
+  if (slugCol) { selectCols.push(`c.${slugCol} AS Identificador`); groupCols.push(`c.${slugCol}`); }
+
+  const sqlText = `SELECT ${selectCols.join(', ')}, COUNT(pc.IdProducto) AS ProductsCount
+                   FROM inv.categorias c
+                   LEFT JOIN inv.producto_categoria pc ON pc.IdCategoria = c.IdCategoria
+                   GROUP BY ${groupCols.join(', ')}
+                   ORDER BY c.Nombre ASC`;
+  const rows = (await p.request().query(sqlText)).recordset;
+  return rows.map(r => ({
+    id: r.IdCategoria,
+    name: r.Nombre,
+    description: r.Descripcion ?? '',
+    identificador: r.Identificador ?? '',
+    productsCount: Number(r.ProductsCount || 0)
+  }));
+}
+
 async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta, cantidad, categorias }) {
   const p = await getDbPool();
   const code = String(codigo || '').trim();
@@ -307,4 +335,4 @@ async function deleteProductoByCodigo(codigo) {
   return { codigo: code, id: idProd };
 }
 
-module.exports = { createProducto, listProductos, getProductoByCodigo, updateProductoByCodigo, getCategorias, deleteProductoByCodigo, createCategoria };
+module.exports = { createProducto, listProductos, getProductoByCodigo, updateProductoByCodigo, getCategorias, deleteProductoByCodigo, createCategoria, getCategoriasDetalle };

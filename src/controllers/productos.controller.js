@@ -94,7 +94,7 @@ async function deleteProducto(req, res) {
   }
 }
 
-module.exports = { createProducto, listProductos, getProducto, updateProducto, getCategorias, deleteProducto, createCategoria };
+module.exports = { createProducto, listProductos, getProducto, updateProducto, getCategorias, deleteProducto, createCategoria, getCategoriasDetalle };
 
 async function createCategoria(req, res) {
   try {
@@ -109,6 +109,16 @@ async function createCategoria(req, res) {
       return res.status(409).json({ success: false, message: 'La categoria ya existe' });
     }
     console.error('createCategoria error:', err);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+}
+
+async function getCategoriasDetalle(req, res) {
+  try {
+    const rows = await service.getCategoriasDetalle();
+    return res.json({ success: true, categorias: rows });
+  } catch (err) {
+    console.error('getCategoriasDetalle error:', err);
     return res.status(500).json({ success: false, message: 'Error interno del servidor' });
   }
 }
