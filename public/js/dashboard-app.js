@@ -2347,7 +2347,9 @@
     };
 
     const refreshForProduct = (prod) => {
-      const set = new Set((prod.categories || []).map(x => x.toString()));
+      // Normalizar a minúsculas para coincidir con selectedSet y los checks del grid
+      const set = new Set((prod.categories || [])
+        .map(x => x != null ? x.toString().trim().toLowerCase() : ''));
       renderGrid(set);
       updateSummary(prod, set);
       // Controles
@@ -2399,7 +2401,20 @@
     }
 
     productInput.addEventListener('input', () => {
-      renderProductResults(productInput.value);
+      const val = (productInput.value || '').trim();
+      // Si el campo queda vacío, limpiar selección y resumen
+      if (!val) {
+        currentProduct = { code: '', name: '', categories: [] };
+        if (resultsBox) { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; }
+        selectedSet.clear();
+        if (search) search.value = '';
+        filtered = allCategories.slice();
+        page = 1;
+        renderPaged();
+        updateSummary(currentProduct, selectedSet);
+        return;
+      }
+      renderProductResults(val);
     });
     productInput.addEventListener('focus', () => {
       renderProductResults(productInput.value);
@@ -2466,6 +2481,17 @@
       .then(d => {
         if (!d?.success) throw new Error(d?.message || 'No se pudo guardar');
         showToast('Asociación actualizada correctamente.','success');
+
+        // Limpiar campos tras guardar: producto, resumen, búsqueda y selección
+        currentProduct = { code: '', name: '', categories: [] };
+        if (productInput) productInput.value = '';
+        if (resultsBox) { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; }
+        selectedSet.clear();
+        if (search) search.value = '';
+        filtered = allCategories.slice();
+        page = 1;
+        renderPaged();
+        updateSummary(currentProduct, selectedSet);
       })
       .catch(err => showToast(err.message || 'Error guardando asociación','error'))
       .finally(() => { saveBtn.disabled=false; saveBtn.removeAttribute('data-loading'); saveBtn.innerHTML = old; });
