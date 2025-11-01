@@ -2943,8 +2943,12 @@
       });
       buildProductTable(tbody, rows);
       productsPager.total = data.pagination?.totalItems || rows.length;
-      const start = ((data.pagination?.currentPage || 1) - 1) * (data.pagination?.itemsPerPage || rows.length) + (rows.length ? 1 : 0);
-      const end = start + rows.length - (rows.length ? 0 : 0);
+      // Rango 1-based correcto: inicio = offset+1, fin = inicio + visibles - 1
+      const currentPage = data.pagination?.currentPage || 1;
+      const perPage = data.pagination?.itemsPerPage || (rows.length || 0);
+      const visible = rows.length || 0;
+      const start = visible ? ((currentPage - 1) * perPage) + 1 : 0;
+      const end = visible ? (start + visible - 1) : 0;
       if (infoEl) infoEl.textContent = `Mostrando ${start}-${end} de ${productsPager.total}`;
       if (prevBtn) prevBtn.disabled = !(data.pagination?.hasPrevPage);
       if (nextBtn) nextBtn.disabled = !(data.pagination?.hasNextPage);
