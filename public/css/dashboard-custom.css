@@ -820,6 +820,85 @@ body.dashboard-body.dark-theme .tag {
   background: #1e293b;
   color: #93c5fd;
 }
+/* Asociación a categorías: autocompletado (dark theme) */
+body.dashboard-body.dark-theme #assocProductInput {
+  background: #0f172a !important;
+  color: #e5e7eb !important;
+  border-color: #334155 !important;
+}
+body.dashboard-body.dark-theme #assocProductInput::placeholder {
+  color: #94a3b8 !important;
+}
+body.dashboard-body.dark-theme #assocProductResults {
+  background: #111827 !important;
+  border: 1px solid #334155 !important;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.45) !important;
+  color: #e5e7eb !important;
+}
+body.dashboard-body.dark-theme #assocProductResults .result-item {
+  color: #e5e7eb;
+}
+body.dashboard-body.dark-theme #assocProductResults .result-item:hover {
+  background: #1f2937;
+  color: #93c5fd;
+}
+/* Asociación a categorías: grid de categorías (dark theme) */
+/* En dark mode: contenedor "invisible" (sin borde/fondo) para que se vean solo las tarjetas */
+body.dashboard-body.dark-theme #assocCategoryGrid {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 2px !important; /* leve aire para que no pegue con los bordes */
+}
+body.dashboard-body.dark-theme .cat-chip {
+  background: #0f172a !important;
+  color: #e5e7eb !important;
+  border: 1px solid #334155 !important;
+}
+body.dashboard-body.dark-theme .cat-chip:hover {
+  background: #111827 !important;
+  border-color: #475569 !important;
+}
+body.dashboard-body.dark-theme .cat-chip.selected {
+  background: #1e3a8a !important; /* indigo-900 */
+  color: #e0e7ff !important;     /* indigo-100 */
+  border-color: #1e3a8a !important;
+}
+/* Búsqueda y botones del panel (dark) */
+body.dashboard-body.dark-theme #assocCategorySearch {
+  background: #0f172a !important;
+  color: #e5e7eb !important;
+  border-color: #334155 !important;
+}
+/* Input resumen */
+body.dashboard-body.dark-theme #assocSummary {
+  background: #0f172a !important;
+  color: #e5e7eb !important;
+  border: 1px solid #334155 !important;
+}
+body.dashboard-body.dark-theme #assocCatClear,
+body.dashboard-body.dark-theme #assocCatSelectAll,
+body.dashboard-body.dark-theme #assocCatPrev,
+body.dashboard-body.dark-theme #assocCatNext {
+  background: #111827 !important;
+  color: #e5e7eb !important;
+  border: 1px solid #334155 !important;
+}
+body.dashboard-body.dark-theme #assocCatClear:hover,
+body.dashboard-body.dark-theme #assocCatSelectAll:hover,
+body.dashboard-body.dark-theme #assocCatPrev:hover,
+body.dashboard-body.dark-theme #assocCatNext:hover {
+  background: #1f2937 !important;
+  border-color: #475569 !important;
+}
+/* Scrollbar sutil en dark */
+body.dashboard-body.dark-theme #assocProductResults::-webkit-scrollbar {
+  width: 8px;
+}
+body.dashboard-body.dark-theme #assocProductResults::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 8px;
+}
 body.dashboard-body.dark-theme .tag.plain {
   background: transparent;
   color: #93c5fd;
