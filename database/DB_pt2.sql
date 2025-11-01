@@ -1,128 +1,445 @@
 /* =========================================================
-   MÓDULO DE LOGIN/USUARIOS – VERSIÓN ORIGINAL (SIN EXTRAS)
-   - Usuarios, roles, hashing (SHA2_256 + salt 16B)
-   - Login y validación
-   - Recuperación de contraseña con NEWID()
-   - Contraseñas temporales (CHECKSUM(NEWID()))
-   - Bitácoras e índices como en el diseño original
+   DB_parte2 – Script unificado y corregido (SQL Server)
+   - Crea DB y esquemas
+   - INVENTARIO (inv): productos, categorías, M:N, vista
+   - SEGURIDAD (seg): usuarios, funciones, SPs, bitácoras
+   - Roles, permisos y usuarios iniciales
+   - Estados de stock actualizados (0 / <25 / 25-49 / >=50)
    ========================================================= */
 
 ------------------------------------------------------------
--- 0) DB y esquema
+-- 0) Crear/usar base de datos
 ------------------------------------------------------------
-IF DB_ID('AcademicoDB') IS NULL
-    CREATE DATABASE AcademicoDB;
+IF DB_ID('DB_parte2') IS NULL
+    CREATE DATABASE DB_parte2;
 GO
-USE AcademicoDB;
+USE DB_parte2;
 GO
 
+------------------------------------------------------------
+-- A.7) Coherencia de categorías y asociación M:N (idempotente)
+--     - Normaliza posibles variantes con/ sin acento
+--     - Completa inv.producto_categoria a partir de inv.productos.Categorias
+------------------------------------------------------------
+-- 1) Normalizar nombres canónicos (si existieran con/ sin acento)
+IF EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID('inv.categorias'))
+BEGIN
+    -- Actualiza a nombres canónicos sólo si no rompe el índice único
+    IF NOT EXISTS (
+        SELECT 1 FROM inv.categorias WHERE Nombre = 'Tecnologia'
+    )
+    BEGIN
+        UPDATE inv.categorias
+        SET Nombre = 'Tecnologia'
+        WHERE LOWER(CONVERT(VARCHAR(100), Nombre COLLATE Latin1_General_CI_AI)) IN ('tecnologia','tecnologa','tecnología');
+    END
+END
+GO
+
+-- 2) Completar asociaciones M:N desde la columna de texto (Categorias)
+IF EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID('inv.productos'))
+   AND EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID('inv.categorias'))
+   AND EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID('inv.producto_categoria'))
+BEGIN
+    ;WITH Tok AS (
+        SELECT p.IdProducto,
+               LTRIM(RTRIM(value)) AS CatName
+        FROM inv.productos p
+        CROSS APPLY STRING_SPLIT(REPLACE(COALESCE(p.Categorias,''), ',', ';'), ';') s
+    )
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT t.IdProducto, c.IdCategoria
+    FROM Tok t
+    JOIN inv.categorias c
+      ON LOWER(CONVERT(VARCHAR(100), c.Nombre COLLATE Latin1_General_CI_AI)) = LOWER(CONVERT(VARCHAR(100), t.CatName COLLATE Latin1_General_CI_AI))
+    LEFT JOIN inv.producto_categoria pc
+      ON pc.IdProducto = t.IdProducto AND pc.IdCategoria = c.IdCategoria
+    WHERE t.CatName <> '' AND pc.IdProducto IS NULL;
+END
+GO
+
+/* =========================================================
+   SECCIÓN A) INVENTARIO
+   ========================================================= */
+
+------------------------------------------------------------
+-- A.1) Esquema inv
+------------------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'inv')
+    EXEC('CREATE SCHEMA inv');
+GO
+
+------------------------------------------------------------
+-- A.2) Tabla base: inv.productos (PRIMERO)
+--     Incluye Estado calculado según Cantidad (reglas nuevas)
+------------------------------------------------------------
+IF OBJECT_ID('inv.productos') IS NULL
+BEGIN
+    CREATE TABLE inv.productos
+    (
+        IdProducto     INT IDENTITY(1,1) PRIMARY KEY,
+        Codigo         VARCHAR(50)  NOT NULL,
+        Nombre         VARCHAR(150) NOT NULL,
+        -- Texto libre; relación formal va en la tabla puente
+        Categorias     NVARCHAR(200) NULL,
+        PrecioCosto    DECIMAL(18,2) NOT NULL,
+        PrecioVenta    DECIMAL(18,2) NOT NULL,
+        Cantidad       INT NOT NULL CONSTRAINT DF_inv_productos_Cantidad DEFAULT(0)
+    );
+
+    -- Regla: Cantidad no negativa
+    ALTER TABLE inv.productos
+      ADD CONSTRAINT CK_inv_productos_Cantidad_NoNegativa CHECK (Cantidad >= 0);
+
+    -- Columna calculada de Estado (nuevos umbrales)
+    ALTER TABLE inv.productos
+    ADD Estado AS (
+        CASE
+            WHEN Cantidad = 0 THEN 'Sin existencias'
+            WHEN Cantidad > 0 AND Cantidad < 25 THEN 'Stock critico'
+            WHEN Cantidad >= 25 AND Cantidad < 50 THEN 'Stock bajo'
+            ELSE 'Stock'
+        END
+    ) PERSISTED;
+
+    -- Índices
+    CREATE UNIQUE INDEX UX_inv_productos_Codigo ON inv.productos(Codigo);
+    CREATE INDEX IX_inv_productos_Estado ON inv.productos(Estado);
+    CREATE INDEX IX_inv_productos_Nombre ON inv.productos(Nombre);
+END
+GO
+
+------------------------------------------------------------
+-- A.3) Semillas de productos (30)
+--     Basadas en tu archivo original
+------------------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM inv.productos)
+BEGIN
+    -- 15 CON CATEGORÍAS (texto libre)
+    INSERT INTO inv.productos (Codigo, Nombre, Categorias, PrecioCosto, PrecioVenta, Cantidad) VALUES
+    ('LAB-0021','Reactivo A-90','Laboratorio',22.40,38.99,120),
+    ('TEC-0312','Calculadora científica FX','Tecnologia;Papelera',45.00,69.90,85),
+    ('SER-0104','Licencia software CAD','Servicios;Tecnologia',180.00,245.00,30),
+    ('PAP-0718','Cuaderno profesional','Papelera',1.60,2.99,0),
+    ('LAB-0045','Pipeta automática 10ml','Laboratorio',28.00,46.50,40),
+    ('EQU-0201','Kit de laboratorio básico','Equipamiento;Laboratorio',120.00,169.00,140),
+    ('TEC-0205','Licencia ofimática anual','Tecnologia;Servicios',55.00,89.00,55),
+    ('SER-0208','Soporte técnico anual','Servicios',200.00,280.00,0),
+    ('PAP-0302','Resmas papel A4 premium','Papelera',3.10,5.40,102),
+    ('LAB-0064','Bata laboratorio estándar','Laboratorio',12.00,19.90,70),
+    ('TEC-0410','Sensor digital de pH','Tecnologia;Laboratorio',210.00,285.00,25),
+    ('EQU-0303','Microscopio escolar','Equipamiento',260.00,349.00,95),
+    ('LAB-0078','Caja porta-objetos','Laboratorio',4.20,7.99,0),
+    ('PAP-0901','Marcadores permanentes set x12','Papelera',6.80,11.90,155),
+    ('TEC-0511','Licencia software estadístico','Tecnologia',98.00,139.00,10);
+
+    -- 15 SIN CATEGORÍAS (NULL)
+    INSERT INTO inv.productos (Codigo, Nombre, Categorias, PrecioCosto, PrecioVenta, Cantidad) VALUES
+    ('GEN-1001','Kit seguridad ocular',NULL,8.50,13.90,100),
+    ('GEN-1002','Guantes de nitrilo',NULL,3.20,5.40,48),
+    ('GEN-1003','Limpiador isopropílico',NULL,2.10,3.90,0),
+    ('GEN-1004','Cinta masking 1"',NULL,0.80,1.60,60),
+    ('GEN-1005','Adaptador corriente 12V',NULL,6.20,9.90,130),
+    ('GEN-1006','Cable USB-C 1m',NULL,1.40,2.90,0),
+    ('GEN-1007','Balanza de precisión 1kg',NULL,85.00,119.00,44),
+    ('GEN-1008','Switch 5 puertos',NULL,12.00,19.90,52),
+    ('GEN-1009','Alcohol gel 500ml',NULL,1.10,2.40,200),
+    ('GEN-1010','Etiquetas térmicas 57mm',NULL,0.60,1.20,0),
+    ('GEN-1011','Caja organizadora 10L',NULL,4.10,7.90,88),
+    ('GEN-1012','Pilas AA pack x4',NULL,1.50,3.20,0),
+    ('GEN-1013','Extensión eléctrica 3m',NULL,3.50,6.90,35),
+    ('GEN-1014','Tapete antiestático',NULL,14.00,22.00,110),
+    ('GEN-1015','Rotulador punta fina',NULL,0.70,1.40,65);
+END
+GO
+-- (Semillas alineadas al archivo) 
+
+------------------------------------------------------------
+-- A.4) Tabla inv.categorias
+------------------------------------------------------------
+IF OBJECT_ID('inv.categorias') IS NULL
+BEGIN
+    CREATE TABLE inv.categorias
+    (
+        IdCategoria   INT IDENTITY(1,1) PRIMARY KEY,
+        Nombre        VARCHAR(100) NOT NULL,
+        Identificador VARCHAR(50)  NOT NULL,
+        Descripcion   NVARCHAR(250) NULL
+    );
+    CREATE UNIQUE INDEX UX_inv_categorias_Nombre        ON inv.categorias(Nombre);
+    CREATE UNIQUE INDEX UX_inv_categorias_Identificador ON inv.categorias(Identificador);
+END
+GO
+
+-- Semillas de categorías
+IF NOT EXISTS (SELECT 1 FROM inv.categorias)
+BEGIN
+    INSERT INTO inv.categorias (Nombre, Identificador, Descripcion) VALUES
+    ('Laboratorio','laboratorio-1',N'Reactivos, material clínico y seguridad.'),
+    ('Tecnologia','tecnologia-2',N'Equipos electrónicos y licencias.'),
+    ('Papelera','papelera-3',N'Papelería especializada y de oficina.'),
+    ('Servicios','servicios-4',N'Capacitaciones y soporte técnico.'),
+    ('Equipamiento','equipamiento-5',N'Mobiliario y equipo de laboratorio.');
+END
+GO
+
+------------------------------------------------------------
+-- A.5) Relación M:N: inv.producto_categoria
+------------------------------------------------------------
+IF OBJECT_ID('inv.producto_categoria') IS NULL
+BEGIN
+    CREATE TABLE inv.producto_categoria
+    (
+        IdProducto  INT NOT NULL,
+        IdCategoria INT NOT NULL,
+        CONSTRAINT PK_inv_producto_categoria PRIMARY KEY(IdProducto, IdCategoria),
+        CONSTRAINT FK_inv_pc_producto  FOREIGN KEY(IdProducto)
+            REFERENCES inv.productos(IdProducto)  ON DELETE CASCADE,
+        CONSTRAINT FK_inv_pc_categoria FOREIGN KEY(IdCategoria)
+            REFERENCES inv.categorias(IdCategoria) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_inv_pc_IdCategoria ON inv.producto_categoria(IdCategoria);
+END
+GO
+
+-- Siembra de relaciones para ciertos productos
+IF EXISTS (SELECT 1 FROM inv.productos) AND EXISTS (SELECT 1 FROM inv.categorias)
+BEGIN
+    -- LAB-0021 → Laboratorio
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT p.IdProducto, c.IdCategoria
+    FROM inv.productos p CROSS JOIN inv.categorias c
+    WHERE p.Codigo='LAB-0021' AND c.Nombre='Laboratorio'
+      AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc
+                      WHERE pc.IdProducto=p.IdProducto AND pc.IdCategoria=c.IdCategoria);
+
+    -- TEC-0312 → Tecnologia, Papelera
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT p.IdProducto, c.IdCategoria
+    FROM inv.productos p CROSS JOIN inv.categorias c
+    WHERE p.Codigo='TEC-0312' AND c.Nombre IN ('Tecnologia','Papelera')
+      AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc
+                      WHERE pc.IdProducto=p.IdProducto AND pc.IdCategoria=c.IdCategoria);
+
+    -- SER-0104 → Servicios, Tecnologia
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT p.IdProducto, c.IdCategoria
+    FROM inv.productos p CROSS JOIN inv.categorias c
+    WHERE p.Codigo='SER-0104' AND c.Nombre IN ('Servicios','Tecnologia')
+      AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc
+                      WHERE pc.IdProducto=p.IdProducto AND pc.IdCategoria=c.IdCategoria);
+
+    -- PAP-0718 → Papelera
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT p.IdProducto, c.IdCategoria
+    FROM inv.productos p CROSS JOIN inv.categorias c
+    WHERE p.Codigo='PAP-0718' AND c.Nombre='Papelera'
+      AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc
+                      WHERE pc.IdProducto=p.IdProducto AND pc.IdCategoria=c.IdCategoria);
+
+    -- LAB-0045 → Laboratorio
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT p.IdProducto, c.IdCategoria
+    FROM inv.productos p CROSS JOIN inv.categorias c
+    WHERE p.Codigo='LAB-0045' AND c.Nombre='Laboratorio'
+      AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc
+                      WHERE pc.IdProducto=p.IdProducto AND pc.IdCategoria=c.IdCategoria);
+
+    -- EQU-0201 → Equipamiento, Laboratorio
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT p.IdProducto, c.IdCategoria
+    FROM inv.productos p CROSS JOIN inv.categorias c
+    WHERE p.Codigo='EQU-0201' AND c.Nombre IN ('Equipamiento','Laboratorio')
+      AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc
+                      WHERE pc.IdProducto=p.IdProducto AND pc.IdCategoria=c.IdCategoria);
+
+    -- TEC-0410 → Tecnologia, Laboratorio
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT p.IdProducto, c.IdCategoria
+    FROM inv.productos p CROSS JOIN inv.categorias c
+    WHERE p.Codigo='TEC-0410' AND c.Nombre IN ('Tecnologia','Laboratorio')
+      AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc
+                      WHERE pc.IdProducto=p.IdProducto AND pc.IdCategoria=c.IdCategoria);
+
+    -- EQU-0303 → Equipamiento
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT p.IdProducto, c.IdCategoria
+    FROM inv.productos p CROSS JOIN inv.categorias c
+    WHERE p.Codigo='EQU-0303' AND c.Nombre='Equipamiento'
+      AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc
+                      WHERE pc.IdProducto=p.IdProducto AND pc.IdCategoria=c.IdCategoria);
+
+    -- LAB-0078 → Laboratorio
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT p.IdProducto, c.IdCategoria
+    FROM inv.productos p CROSS JOIN inv.categorias c
+    WHERE p.Codigo='LAB-0078' AND c.Nombre='Laboratorio'
+      AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc
+                      WHERE pc.IdProducto=p.IdProducto AND pc.IdCategoria=c.IdCategoria);
+
+    -- PAP-0901 → Papelera
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT p.IdProducto, c.IdCategoria
+    FROM inv.productos p CROSS JOIN inv.categorias c
+    WHERE p.Codigo='PAP-0901' AND c.Nombre='Papelera'
+      AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc
+                      WHERE pc.IdProducto=p.IdProducto AND pc.IdCategoria=c.IdCategoria);
+
+    -- TEC-0511 → Tecnologia
+    INSERT INTO inv.producto_categoria(IdProducto, IdCategoria)
+    SELECT p.IdProducto, c.IdCategoria
+    FROM inv.productos p CROSS JOIN inv.categorias c
+    WHERE p.Codigo='TEC-0511' AND c.Nombre='Tecnologia'
+      AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc
+                      WHERE pc.IdProducto=p.IdProducto AND pc.IdCategoria=c.IdCategoria);
+END
+GO
+
+------------------------------------------------------------
+-- A.6) Vista inv.v_productos (al final de tablas/relaciones)
+------------------------------------------------------------
+IF OBJECT_ID('inv.v_productos','V') IS NOT NULL
+    DROP VIEW inv.v_productos;
+GO
+CREATE VIEW inv.v_productos AS
+SELECT
+    p.IdProducto,
+    p.Codigo,
+    p.Nombre,
+    p.PrecioCosto,
+    p.PrecioVenta,
+    p.Cantidad,
+    p.Estado,
+    STRING_AGG(c.Nombre, '; ') WITHIN GROUP (ORDER BY c.Nombre) AS Categorias
+FROM inv.productos p
+LEFT JOIN inv.producto_categoria pc ON pc.IdProducto = p.IdProducto
+LEFT JOIN inv.categorias c         ON c.IdCategoria = pc.IdCategoria
+GROUP BY p.IdProducto, p.Codigo, p.Nombre, p.PrecioCosto, p.PrecioVenta, p.Cantidad, p.Estado;
+GO
+
+/* =========================================================
+   SECCIÓN B) SEGURIDAD / LOGIN
+   ========================================================= */
+
+------------------------------------------------------------
+-- B.1) Esquema seg
+------------------------------------------------------------
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'seg')
     EXEC('CREATE SCHEMA seg AUTHORIZATION dbo;');
 GO
 
 ------------------------------------------------------------
--- 1) TABLAS
+-- B.2) Tablas principales y bitácoras
 ------------------------------------------------------------
-
--- Usuarios (estructura original)
-IF OBJECT_ID('seg.tbUsuario') IS NOT NULL DROP TABLE seg.tbUsuario;
-CREATE TABLE seg.tbUsuario
-(
-    IdUsuario            INT IDENTITY(1,1) PRIMARY KEY,
-    Usuario              VARCHAR(50)   NOT NULL,
-    Nombres              VARCHAR(100)  NOT NULL,
-    Apellidos            VARCHAR(100)  NOT NULL,
-    HashPassword         VARBINARY(32) NOT NULL,   -- SHA2_256
-    Salt                 VARBINARY(16) NOT NULL,   -- CRYPT_GEN_RANDOM(16)
-    Correo               VARCHAR(120)  NOT NULL,
-    Rol                  VARCHAR(20)   NOT NULL CHECK (Rol IN ('admin','secretaria')),
-    Estado               BIT           NOT NULL CONSTRAINT DF_tbUsuario_Estado DEFAULT(1),
-    FechaCreacion        DATETIME2(0)  NOT NULL CONSTRAINT DF_tbUsuario_FC DEFAULT(SYSDATETIME()),
-    UltimoCambioPass     DATETIME2(0)  NULL,
-
-    -- Contraseña temporal (original)
-    EsPasswordTemporal   BIT           NOT NULL CONSTRAINT DF_tbUsuario_Temp DEFAULT(0),
-    FechaExpiraPassword  DATETIME2(0)  NULL
-);
+IF OBJECT_ID('seg.tbUsuario') IS NULL
+BEGIN
+    CREATE TABLE seg.tbUsuario
+    (
+        IdUsuario            INT IDENTITY(1,1) PRIMARY KEY,
+        Usuario              VARCHAR(50)   NOT NULL,
+        Nombres              VARCHAR(100)  NOT NULL,
+        Apellidos            VARCHAR(100)  NOT NULL,
+        HashPassword         VARBINARY(32) NOT NULL,
+        Salt                 VARBINARY(16) NOT NULL,
+        Correo               VARCHAR(120)  NOT NULL,
+        Rol                  VARCHAR(20)   NOT NULL CHECK (Rol IN ('admin','secretaria')),
+        Estado               BIT           NOT NULL CONSTRAINT DF_tbUsuario_Estado DEFAULT(1),
+        FechaCreacion        DATETIME2(0)  NOT NULL CONSTRAINT DF_tbUsuario_FC DEFAULT(SYSDATETIME()),
+        UltimoCambioPass     DATETIME2(0)  NULL,
+        EsPasswordTemporal   BIT           NOT NULL CONSTRAINT DF_tbUsuario_Temp DEFAULT(0),
+        FechaExpiraPassword  DATETIME2(0)  NULL
+    );
+END
 GO
 
--- Unicidad (original)
-CREATE UNIQUE INDEX UX_tbUsuario_Usuario ON seg.tbUsuario(Usuario);
-CREATE UNIQUE INDEX UX_tbUsuario_Correo  ON seg.tbUsuario(Correo);
-
--- Bitácora de accesos (original, sin IP/UA)
-IF OBJECT_ID('seg.tbBitacoraAcceso') IS NOT NULL DROP TABLE seg.tbBitacoraAcceso;
-CREATE TABLE seg.tbBitacoraAcceso
-(
-    IdAcceso     BIGINT IDENTITY(1,1) PRIMARY KEY,
-    IdUsuario    INT          NULL,         -- -1 si no existe
-    Usuario      VARCHAR(50)  NOT NULL,
-    FechaHora    DATETIME2(0) NOT NULL CONSTRAINT DF_BitAcceso_FH DEFAULT(SYSDATETIME()),
-    Resultado    VARCHAR(20)  NOT NULL      -- 'OK' | 'FAIL'
-);
+-- Índices únicos
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_tbUsuario_Usuario' AND object_id = OBJECT_ID('seg.tbUsuario'))
+    CREATE UNIQUE INDEX UX_tbUsuario_Usuario ON seg.tbUsuario(Usuario);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_tbUsuario_Correo' AND object_id = OBJECT_ID('seg.tbUsuario'))
+    CREATE UNIQUE INDEX UX_tbUsuario_Correo ON seg.tbUsuario(Correo);
 GO
 
--- Bitácora de transacciones (auditoría)
-IF OBJECT_ID('seg.tbBitacoraTransacciones') IS NOT NULL DROP TABLE seg.tbBitacoraTransacciones;
-CREATE TABLE seg.tbBitacoraTransacciones
-(
-    IdTransaccion BIGINT IDENTITY(1,1) PRIMARY KEY,
-    FechaHora     DATETIME2(0) NOT NULL CONSTRAINT DF_BitTx_FH DEFAULT(SYSDATETIME()),
-    Usuario       VARCHAR(50)  NOT NULL,
-    IdUsuario     INT          NOT NULL,
-    Operacion     VARCHAR(40)  NOT NULL,
-    Entidad       VARCHAR(40)  NOT NULL,
-    ClaveEntidad  VARCHAR(100) NOT NULL,
-    Detalle       NVARCHAR(4000) NULL
-);
+-- Bitácora de accesos
+IF OBJECT_ID('seg.tbBitacoraAcceso') IS NULL
+BEGIN
+    CREATE TABLE seg.tbBitacoraAcceso
+    (
+        IdAcceso     BIGINT IDENTITY(1,1) PRIMARY KEY,
+        IdUsuario    INT          NULL,
+        Usuario      VARCHAR(50)  NULL,
+        FechaHora    DATETIME2(0) NOT NULL CONSTRAINT DF_BitAcceso_FH DEFAULT(SYSDATETIME()),
+        Resultado    VARCHAR(10)  NOT NULL CHECK (Resultado IN ('OK','FAIL'))
+    );
+END
 GO
 
--- Recuperación de contraseña (token con NEWID() como en el script original)
-IF OBJECT_ID('seg.tbRecuperacionContrasena') IS NOT NULL DROP TABLE seg.tbRecuperacionContrasena;
-CREATE TABLE seg.tbRecuperacionContrasena
-(
-    IdToken        UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID() PRIMARY KEY,
-    IdUsuario      INT             NOT NULL,
-    Token          UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID(),  -- Token expuesto (GUID)
-    FechaCreacion  DATETIME2(0)    NOT NULL CONSTRAINT DF_Recup_FC DEFAULT(SYSDATETIME()),
-    FechaExpira    DATETIME2(0)    NOT NULL,
-    Usado          BIT             NOT NULL CONSTRAINT DF_Recup_Usado DEFAULT(0),
-
-    CONSTRAINT FK_Rec_User FOREIGN KEY(IdUsuario) REFERENCES seg.tbUsuario(IdUsuario)
-);
+-- Bitácora de transacciones
+IF OBJECT_ID('seg.tbBitacoraTransacciones') IS NULL
+BEGIN
+    CREATE TABLE seg.tbBitacoraTransacciones
+    (
+        IdTx          BIGINT IDENTITY(1,1) PRIMARY KEY,
+        Usuario       VARCHAR(50)  NOT NULL,
+        IdUsuario     INT          NULL,
+        FechaHora     DATETIME2(0) NOT NULL CONSTRAINT DF_BitTx_FH DEFAULT(SYSDATETIME()),
+        Operacion     VARCHAR(40)  NOT NULL,
+        Entidad       VARCHAR(60)  NOT NULL,
+        ClaveEntidad  VARCHAR(120) NULL,
+        Detalle       NVARCHAR(300) NULL
+    );
+END
 GO
-CREATE UNIQUE NONCLUSTERED INDEX UX_Recuperacion_Token ON seg.tbRecuperacionContrasena(Token);
-CREATE NONCLUSTERED INDEX IX_Recuperacion_Vigente
-ON seg.tbRecuperacionContrasena (IdUsuario, FechaCreacion DESC)
-INCLUDE (FechaExpira, Token)
-WHERE Usado = 0;
+
+-- Recuperación de contraseña
+IF OBJECT_ID('seg.tbRecuperacionContrasena') IS NULL
+BEGIN
+    CREATE TABLE seg.tbRecuperacionContrasena
+    (
+        IdRec         BIGINT IDENTITY(1,1) PRIMARY KEY,
+        IdUsuario     INT              NOT NULL,
+        Token         UNIQUEIDENTIFIER NOT NULL,
+        FechaCreacion DATETIME2(0)     NOT NULL CONSTRAINT DF_Rec_FC DEFAULT(SYSDATETIME()),
+        FechaExpira   DATETIME2(0)     NOT NULL,
+        Usado         BIT              NOT NULL CONSTRAINT DF_Rec_Usado DEFAULT(0)
+    );
+END
+GO
+
+-- Índices adicionales
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Recuperacion_Token' AND object_id = OBJECT_ID('seg.tbRecuperacionContrasena'))
+    CREATE UNIQUE NONCLUSTERED INDEX UX_Recuperacion_Token ON seg.tbRecuperacionContrasena(Token);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Recuperacion_Vigente' AND object_id = OBJECT_ID('seg.tbRecuperacionContrasena'))
+    CREATE NONCLUSTERED INDEX IX_Recuperacion_Vigente
+    ON seg.tbRecuperacionContrasena (IdUsuario, FechaCreacion DESC)
+    INCLUDE (FechaExpira, Token)
+    WHERE Usado = 0;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_tbUsuario_Rol_Estado' AND object_id = OBJECT_ID('seg.tbUsuario'))
+    CREATE NONCLUSTERED INDEX IX_tbUsuario_Rol_Estado
+    ON seg.tbUsuario (Rol, Estado)
+    INCLUDE (Usuario, Nombres, Apellidos, Correo, FechaCreacion);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_BitAcceso_IdUsuario_Fecha' AND object_id = OBJECT_ID('seg.tbBitacoraAcceso'))
+    CREATE NONCLUSTERED INDEX IX_BitAcceso_IdUsuario_Fecha
+    ON seg.tbBitacoraAcceso (IdUsuario, FechaHora DESC)
+    INCLUDE (Resultado, Usuario);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_BitAcceso_FAIL' AND object_id = OBJECT_ID('seg.tbBitacoraAcceso'))
+    CREATE NONCLUSTERED INDEX IX_BitAcceso_FAIL
+    ON seg.tbBitacoraAcceso (Resultado)
+    INCLUDE (IdUsuario, FechaHora, Usuario)
+    WHERE Resultado='FAIL';
 GO
 
 ------------------------------------------------------------
--- 1.1) ÍNDICES (originales)
+-- B.3) Funciones
 ------------------------------------------------------------
-CREATE NONCLUSTERED INDEX IX_tbUsuario_Rol_Estado
-ON seg.tbUsuario (Rol, Estado)
-INCLUDE (Usuario, Nombres, Apellidos, Correo, FechaCreacion);
-
-CREATE NONCLUSTERED INDEX IX_BitAcceso_IdUsuario_Fecha
-ON seg.tbBitacoraAcceso (IdUsuario, FechaHora DESC)
-INCLUDE (Resultado, Usuario);
-
-CREATE NONCLUSTERED INDEX IX_BitAcceso_FAIL
-ON seg.tbBitacoraAcceso (Resultado)
-INCLUDE (IdUsuario, FechaHora, Usuario)
-WHERE Resultado='FAIL';
+IF OBJECT_ID('seg.fn_IsPasswordStrong') IS NULL
+    EXEC('CREATE FUNCTION seg.fn_IsPasswordStrong (@pwd NVARCHAR(200)) RETURNS BIT AS BEGIN RETURN 1; END');
 GO
-
-------------------------------------------------------------
--- 2) FUNCIONES (originales)
-------------------------------------------------------------
-
--- Complejidad de contraseña
-IF OBJECT_ID('seg.fn_IsPasswordStrong') IS NOT NULL DROP FUNCTION seg.fn_IsPasswordStrong;
-GO
-CREATE FUNCTION seg.fn_IsPasswordStrong (@pwd NVARCHAR(200))
+ALTER FUNCTION seg.fn_IsPasswordStrong (@pwd NVARCHAR(200))
 RETURNS BIT
 AS
 BEGIN
@@ -136,10 +453,10 @@ BEGIN
 END;
 GO
 
--- Hash SHA2-256 con salt
-IF OBJECT_ID('seg.fn_HashWithSalt') IS NOT NULL DROP FUNCTION seg.fn_HashWithSalt;
+IF OBJECT_ID('seg.fn_HashWithSalt') IS NULL
+    EXEC('CREATE FUNCTION seg.fn_HashWithSalt (@pwd NVARCHAR(200), @salt VARBINARY(16)) RETURNS VARBINARY(32) AS BEGIN RETURN 0x00; END');
 GO
-CREATE FUNCTION seg.fn_HashWithSalt (@pwd NVARCHAR(200), @salt VARBINARY(16))
+ALTER FUNCTION seg.fn_HashWithSalt (@pwd NVARCHAR(200), @salt VARBINARY(16))
 RETURNS VARBINARY(32)
 AS
 BEGIN
@@ -148,13 +465,12 @@ END;
 GO
 
 ------------------------------------------------------------
--- 3) PROCEDIMIENTOS (originales)
+-- B.4) Procedimientos almacenados
 ------------------------------------------------------------
-
--- Alta de usuario
-IF OBJECT_ID('seg.sp_RegistrarUsuario') IS NOT NULL DROP PROCEDURE seg.sp_RegistrarUsuario;
+IF OBJECT_ID('seg.sp_RegistrarUsuario') IS NULL
+    EXEC('CREATE PROCEDURE seg.sp_RegistrarUsuario AS BEGIN SELECT 1; END');
 GO
-CREATE PROCEDURE seg.sp_RegistrarUsuario
+ALTER PROCEDURE seg.sp_RegistrarUsuario
     @Usuario     VARCHAR(50),
     @Nombres     VARCHAR(100),
     @Apellidos   VARCHAR(100),
@@ -167,20 +483,11 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF @Rol NOT IN ('admin','secretaria')
-    BEGIN SET @Mensaje=N'Rol inválido'; RETURN 103; END
-
-    IF EXISTS(SELECT 1 FROM seg.tbUsuario WHERE Usuario=@Usuario)
-    BEGIN SET @Mensaje=N'Usuario ya existe'; RETURN 101; END
-
-    IF EXISTS(SELECT 1 FROM seg.tbUsuario WHERE Correo=@Correo)
-    BEGIN SET @Mensaje=N'Correo duplicado'; RETURN 102; END
-
-    IF seg.fn_IsPasswordStrong(@Password)=0
-    BEGIN SET @Mensaje=N'Contraseña débil'; RETURN 201; END
-
-    IF @Password<>@Confirmar
-    BEGIN SET @Mensaje=N'Confirmación no coincide'; RETURN 202; END
+    IF @Rol NOT IN ('admin','secretaria') BEGIN SET @Mensaje=N'Rol inválido'; RETURN 103; END
+    IF EXISTS(SELECT 1 FROM seg.tbUsuario WHERE Usuario=@Usuario) BEGIN SET @Mensaje=N'Usuario ya existe'; RETURN 101; END
+    IF EXISTS(SELECT 1 FROM seg.tbUsuario WHERE Correo=@Correo) BEGIN SET @Mensaje=N'Correo duplicado'; RETURN 102; END
+    IF seg.fn_IsPasswordStrong(@Password)=0 BEGIN SET @Mensaje=N'Contraseña débil'; RETURN 201; END
+    IF @Password<>@Confirmar BEGIN SET @Mensaje=N'Confirmación no coincide'; RETURN 202; END
 
     DECLARE @salt VARBINARY(16)=CRYPT_GEN_RANDOM(16);
     DECLARE @hash VARBINARY(32)=seg.fn_HashWithSalt(@Password,@salt);
@@ -193,10 +500,10 @@ BEGIN
 END;
 GO
 
--- Login (comportamiento original; registra OK/FAIL; sin lockout)
-IF OBJECT_ID('seg.sp_LoginUsuario') IS NOT NULL DROP PROCEDURE seg.sp_LoginUsuario;
+IF OBJECT_ID('seg.sp_LoginUsuario') IS NULL
+    EXEC('CREATE PROCEDURE seg.sp_LoginUsuario AS BEGIN SELECT 1; END');
 GO
-CREATE PROCEDURE seg.sp_LoginUsuario
+ALTER PROCEDURE seg.sp_LoginUsuario
     @Usuario     VARCHAR(50),
     @Password    NVARCHAR(200),
     @Mensaje     NVARCHAR(200) OUTPUT
@@ -246,10 +553,10 @@ BEGIN
 END;
 GO
 
--- Validar usuario para front (retorna datos del usuario si login OK)
-IF OBJECT_ID('seg.sp_ValidarUsuario') IS NOT NULL DROP PROCEDURE seg.sp_ValidarUsuario;
+IF OBJECT_ID('seg.sp_ValidarUsuario') IS NULL
+    EXEC('CREATE PROCEDURE seg.sp_ValidarUsuario AS BEGIN SELECT 1; END');
 GO
-CREATE PROCEDURE seg.sp_ValidarUsuario
+ALTER PROCEDURE seg.sp_ValidarUsuario
     @Usuario   VARCHAR(50),
     @Password  NVARCHAR(200)
 AS
@@ -278,10 +585,10 @@ BEGIN
 END;
 GO
 
--- Actualizar contraseña
-IF OBJECT_ID('seg.sp_ActualizarContrasena') IS NOT NULL DROP PROCEDURE seg.sp_ActualizarContrasena;
+IF OBJECT_ID('seg.sp_ActualizarContrasena') IS NULL
+    EXEC('CREATE PROCEDURE seg.sp_ActualizarContrasena AS BEGIN SELECT 1; END');
 GO
-CREATE PROCEDURE seg.sp_ActualizarContrasena
+ALTER PROCEDURE seg.sp_ActualizarContrasena
     @Usuario         VARCHAR(50),
     @PasswordActual  NVARCHAR(200),
     @PasswordNueva   NVARCHAR(200),
@@ -300,11 +607,8 @@ BEGIN
     SET @calc=seg.fn_HashWithSalt(@PasswordActual,@salt);
     IF @calc<>@hash BEGIN SET @Mensaje=N'Contraseña actual incorrecta'; RETURN 303; END
 
-    IF seg.fn_IsPasswordStrong(@PasswordNueva)=0
-    BEGIN SET @Mensaje=N'Contraseña nueva débil'; RETURN 201; END
-
-    IF @PasswordNueva<>@ConfirmarNueva
-    BEGIN SET @Mensaje=N'Confirmación no coincide'; RETURN 202; END
+    IF seg.fn_IsPasswordStrong(@PasswordNueva)=0 BEGIN SET @Mensaje=N'Contraseña nueva débil'; RETURN 201; END
+    IF @PasswordNueva<>@ConfirmarNueva BEGIN SET @Mensaje=N'Confirmación no coincide'; RETURN 202; END
 
     DECLARE @newSalt VARBINARY(16)=CRYPT_GEN_RANDOM(16);
     DECLARE @newHash VARBINARY(32)=seg.fn_HashWithSalt(@PasswordNueva,@newSalt);
@@ -322,10 +626,10 @@ BEGIN
 END;
 GO
 
--- Generar token de recuperación (invalida previos) – NEWID()
-IF OBJECT_ID('seg.sp_GenerarTokenRecuperacion') IS NOT NULL DROP PROCEDURE seg.sp_GenerarTokenRecuperacion;
+IF OBJECT_ID('seg.sp_GenerarTokenRecuperacion') IS NULL
+    EXEC('CREATE PROCEDURE seg.sp_GenerarTokenRecuperacion AS BEGIN SELECT 1; END');
 GO
-CREATE PROCEDURE seg.sp_GenerarTokenRecuperacion
+ALTER PROCEDURE seg.sp_GenerarTokenRecuperacion
     @Correo        VARCHAR(120),
     @Token         UNIQUEIDENTIFIER OUTPUT,
     @Mensaje       NVARCHAR(200) OUTPUT
@@ -337,9 +641,7 @@ BEGIN
     SELECT @id=IdUsuario FROM seg.tbUsuario WHERE Correo=@Correo AND Estado=1;
     IF @id IS NULL BEGIN SET @Mensaje=N'Correo no registrado'; RETURN 304; END
 
-    -- Invalidar tokens previos (marcar usados)
-    UPDATE seg.tbRecuperacionContrasena
-      SET Usado=1
+    UPDATE seg.tbRecuperacionContrasena SET Usado=1
     WHERE IdUsuario=@id AND Usado=0;
 
     DECLARE @tk UNIQUEIDENTIFIER = NEWID();
@@ -352,10 +654,10 @@ BEGIN
 END;
 GO
 
--- Recuperar contraseña con token (GUID)
-IF OBJECT_ID('seg.sp_RecuperarContrasena') IS NOT NULL DROP PROCEDURE seg.sp_RecuperarContrasena;
+IF OBJECT_ID('seg.sp_RecuperarContrasena') IS NULL
+    EXEC('CREATE PROCEDURE seg.sp_RecuperarContrasena AS BEGIN SELECT 1; END');
 GO
-CREATE PROCEDURE seg.sp_RecuperarContrasena
+ALTER PROCEDURE seg.sp_RecuperarContrasena
     @Token         UNIQUEIDENTIFIER,
     @PasswordNueva NVARCHAR(200),
     @Confirmar     NVARCHAR(200),
@@ -371,79 +673,39 @@ BEGIN
     WHERE Token=@Token
     ORDER BY FechaCreacion DESC;
 
-    IF @id IS NULL            BEGIN SET @Mensaje=N'Token inválido'; RETURN 501; END
-    IF @usado=1               BEGIN SET @Mensaje=N'Token usado';    RETURN 502; END
-    IF SYSDATETIME()>@expira  BEGIN SET @Mensaje=N'Token expirado'; RETURN 503; END
+    IF @id IS NULL           BEGIN SET @Mensaje=N'Token inválido'; RETURN 501; END
+    IF @usado=1              BEGIN SET @Mensaje=N'Token usado';    RETURN 502; END
+    IF SYSDATETIME()>@expira BEGIN SET @Mensaje=N'Token expirado'; RETURN 503; END
 
-    IF seg.fn_IsPasswordStrong(@PasswordNueva)=0
-        BEGIN SET @Mensaje=N'Contraseña débil'; RETURN 201; END
-    IF @PasswordNueva<>@Confirmar
-        BEGIN SET @Mensaje=N'Confirmación no coincide'; RETURN 202; END
+    IF seg.fn_IsPasswordStrong(@PasswordNueva)=0 BEGIN SET @Mensaje=N'Contraseña débil'; RETURN 201; END
+    IF @PasswordNueva<>@Confirmar           BEGIN SET @Mensaje=N'Confirmación no coincide'; RETURN 202; END
 
     DECLARE @salt VARBINARY(16)=CRYPT_GEN_RANDOM(16);
     DECLARE @hash VARBINARY(32)=seg.fn_HashWithSalt(@PasswordNueva,@salt);
 
     UPDATE seg.tbUsuario
-      SET HashPassword=@hash, Salt=@salt, UltimoCambioPass=SYSDATETIME(),
-          EsPasswordTemporal=0, FechaExpiraPassword=NULL
+    SET HashPassword=@hash, Salt=@salt, UltimoCambioPass=SYSDATETIME(),
+        EsPasswordTemporal=0, FechaExpiraPassword=NULL
     WHERE IdUsuario=@id;
 
     UPDATE seg.tbRecuperacionContrasena
-      SET Usado=1
-    WHERE Token=@Token;
+    SET Usado=1
+    WHERE IdUsuario=@id AND Token=@Token;
 
     INSERT INTO seg.tbBitacoraTransacciones(Usuario,IdUsuario,Operacion,Entidad,ClaveEntidad,Detalle)
-    SELECT Usuario, IdUsuario, 'RECUPERAR_CONTRASENA','tbUsuario', CONCAT('IdUsuario=',@id), N'Password reseteado vía token'
-    FROM seg.tbUsuario WHERE IdUsuario=@id;
+    VALUES('system',@id,'RECUPERAR_CONTRASENA','tbUsuario',CONCAT('IdUsuario=',@id),
+           N'Recuperación por token');
 
-    SET @Mensaje=N'Contraseña actualizada con éxito';
+    SET @Mensaje=N'Contraseña actualizada';
     RETURN 0;
 END;
 GO
 
--- Generar contraseña temporal (CHECKSUM(NEWID()) como original)
-IF OBJECT_ID('seg.sp_GenerarPasswordTemporal') IS NOT NULL DROP PROCEDURE seg.sp_GenerarPasswordTemporal;
+-- Limpieza de passwords temporales expirados
+IF OBJECT_ID('seg.sp_LimpiarPasswordsTemporalesExpirados') IS NULL
+    EXEC('CREATE PROCEDURE seg.sp_LimpiarPasswordsTemporalesExpirados AS BEGIN SELECT 1; END');
 GO
-CREATE PROCEDURE seg.sp_GenerarPasswordTemporal
-    @Correo             VARCHAR(120),
-    @PasswordTemporal   NVARCHAR(200) OUTPUT,
-    @Mensaje            NVARCHAR(200) OUTPUT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DECLARE @id INT, @usuario VARCHAR(50);
-    SELECT @id=IdUsuario,@usuario=Usuario
-    FROM seg.tbUsuario WHERE Correo=@Correo AND Estado=1;
-
-    IF @id IS NULL BEGIN SET @Mensaje=N'Correo no registrado o usuario inactivo'; RETURN 304; END
-
-    -- Generar temporal (mismo patrón original)
-    DECLARE @seed INT = ABS(CHECKSUM(NEWID()));
-    SET @PasswordTemporal = 'Tmp' + CAST(@seed % 1000000 AS VARCHAR(6)) + '!';
-
-    DECLARE @fechaExpira DATETIME2(0)=DATEADD(HOUR,24,SYSDATETIME());
-    DECLARE @salt VARBINARY(16)=CRYPT_GEN_RANDOM(16);
-    DECLARE @hash VARBINARY(32)=seg.fn_HashWithSalt(@PasswordTemporal,@salt);
-
-    UPDATE seg.tbUsuario
-    SET HashPassword=@hash, Salt=@salt, UltimoCambioPass=SYSDATETIME(),
-        EsPasswordTemporal=1, FechaExpiraPassword=@fechaExpira
-    WHERE IdUsuario=@id;
-
-    INSERT INTO seg.tbBitacoraTransacciones(Usuario,IdUsuario,Operacion,Entidad,ClaveEntidad,Detalle)
-    VALUES(@usuario,@id,'GENERAR_PASSWORD_TEMPORAL','tbUsuario',CONCAT('IdUsuario=',@id),
-           N'Contraseña temporal generada');
-
-    SET @Mensaje=N'Contraseña temporal generada (24h)';
-    RETURN 0;
-END;
-GO
-
--- Limpieza de contraseñas temporales expiradas (original)
-IF OBJECT_ID('seg.sp_LimpiarPasswordsTemporalesExpirados') IS NOT NULL DROP PROCEDURE seg.sp_LimpiarPasswordsTemporalesExpirados;
-GO
-CREATE PROCEDURE seg.sp_LimpiarPasswordsTemporalesExpirados
+ALTER PROCEDURE seg.sp_LimpiarPasswordsTemporalesExpirados
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -455,58 +717,51 @@ END;
 GO
 
 ------------------------------------------------------------
--- 4) ROLES Y PERMISOS (originales)
+-- B.5) Roles y permisos
 ------------------------------------------------------------
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name='rol_admin_app')
     CREATE ROLE rol_admin_app AUTHORIZATION dbo;
+
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name='rol_secretaria_app')
     CREATE ROLE rol_secretaria_app AUTHORIZATION dbo;
 
--- Admin app: SELECT/CRUD en seg + EXEC
 GRANT SELECT,INSERT,UPDATE,DELETE ON SCHEMA::seg TO rol_admin_app;
-GRANT EXECUTE ON SCHEMA::seg TO rol_admin_app;
+GRANT EXECUTE                    ON SCHEMA::seg TO rol_admin_app;
 
--- Secretaria/app: SPs necesarios para operar login
-GRANT EXECUTE ON OBJECT::seg.sp_LoginUsuario                   TO rol_secretaria_app;
-GRANT EXECUTE ON OBJECT::seg.sp_ValidarUsuario                 TO rol_secretaria_app;
-GRANT EXECUTE ON OBJECT::seg.sp_ActualizarContrasena           TO rol_secretaria_app;
-GRANT EXECUTE ON OBJECT::seg.sp_GenerarTokenRecuperacion       TO rol_secretaria_app;
-GRANT EXECUTE ON OBJECT::seg.sp_RecuperarContrasena            TO rol_secretaria_app;
-GRANT EXECUTE ON OBJECT::seg.sp_GenerarPasswordTemporal        TO rol_secretaria_app;
-
--- Lectura bitácoras a rol admin
-GRANT SELECT ON OBJECT::seg.tbBitacoraAcceso        TO rol_admin_app;
-GRANT SELECT ON OBJECT::seg.tbBitacoraTransacciones TO rol_admin_app;
-
-
--- Registrar admin y secretaria (DATOS REALES)
-EXEC seg.sp_RegistrarUsuario 'henryOo','Henry Otoniel','Yalibat Pacay','henryalibat4@gmail.com','admin',N'Adm!n_2025*',N'Adm!n_2025*',@msg OUTPUT; SELECT @msg AS MsgAdmin;
-EXEC seg.sp_RegistrarUsuario 'EdinGei','Edin','Coy Lem','coyedin521@gmail.com','secretaria',N'Secr3t_*2025',N'Secr3t_*2025',@msg OUTPUT; SELECT @msg AS MsgSecretaria;
-
-
-------------------------------------------------------------
--- 5) SMOKE TESTS (comentar en prod si no los deseas)
-------------------------------------------------------------
-/*
-DECLARE @msg NVARCHAR(200), @tk UNIQUEIDENTIFIER, @pwdTemp NVARCHAR(200);
-
--- 1) Alta usuario admin
-EXEC seg.sp_RegistrarUsuario 'admin01','Admin','Principal','admin@acme.com','admin',N'Adm!n_2025*',N'Adm!n_2025*',@msg OUTPUT; SELECT @msg AS AltaAdmin;
-
--- 2) Login OK
-EXEC seg.sp_LoginUsuario 'admin01',N'Adm!n_2025*',@msg OUTPUT; SELECT @msg AS LoginOK;
-
--- 3) Generar token recuperación
-EXEC seg.sp_GenerarTokenRecuperacion 'admin@acme.com', @tk OUTPUT, @msg OUTPUT; SELECT @msg AS MsgToken, @tk AS Token;
-
--- 4) Reset con token
-EXEC seg.sp_RecuperarContrasena @tk, N'Adm!n_2025**Nuevo', N'Adm!n_2025**Nuevo', @msg OUTPUT; SELECT @msg AS MsgRecuperar;
-
--- 5) Generar password temporal
-EXEC seg.sp_GenerarPasswordTemporal 'admin@acme.com', @pwdTemp OUTPUT, @msg OUTPUT;
-SELECT @msg AS MsgTemp, @pwdTemp AS PasswordTemporal;
-*/
+GRANT EXECUTE ON OBJECT::seg.sp_LoginUsuario             TO rol_secretaria_app;
+GRANT EXECUTE ON OBJECT::seg.sp_ValidarUsuario           TO rol_secretaria_app;
+GRANT EXECUTE ON OBJECT::seg.sp_ActualizarContrasena     TO rol_secretaria_app;
+GRANT EXECUTE ON OBJECT::seg.sp_GenerarTokenRecuperacion TO rol_secretaria_app;
+GRANT EXECUTE ON OBJECT::seg.sp_RecuperarContrasena      TO rol_secretaria_app;
+GRANT SELECT  ON OBJECT::seg.tbBitacoraAcceso            TO rol_admin_app;
+GRANT SELECT  ON OBJECT::seg.tbBitacoraTransacciones     TO rol_admin_app;
 GO
 
-PRINT '✅ Módulo de login/usuarios creado (versión original, sin añadidos).';
+------------------------------------------------------------
+-- B.6) Usuarios iniciales (idempotente, contraseñas de ejemplo)
+------------------------------------------------------------
+DECLARE @msg NVARCHAR(200);
+
+IF NOT EXISTS (SELECT 1 FROM seg.tbUsuario WHERE Usuario = 'henryOo')
+BEGIN
+    EXEC seg.sp_RegistrarUsuario 
+        'henryOo','Henry Otoniel','Yalibat Pacay','henryalibat4@gmail.com',
+        'admin',N'Adm!n_2025*',N'Adm!n_2025*',@msg OUTPUT; 
+    SELECT @msg AS MsgAdmin;
+END
+ELSE
+    SELECT 'Usuario henryOo ya existe' AS MsgAdmin;
+
+IF NOT EXISTS (SELECT 1 FROM seg.tbUsuario WHERE Usuario = 'EdinGei')
+BEGIN
+    EXEC seg.sp_RegistrarUsuario 
+        'EdinGei','Edin','Coy Lem','coyedin521@gmail.com',
+        'secretaria',N'Secr3t_*2025',N'Secr3t_*2025',@msg OUTPUT; 
+    SELECT @msg AS MsgSecretaria;
+END
+ELSE
+    SELECT 'Usuario EdinGei ya existe' AS MsgSecretaria;
+GO
+
+PRINT '✅ Inventario, seguridad y estados de stock creados/actualizados correctamente.';
 GO
