@@ -94,7 +94,7 @@ async function deleteProducto(req, res) {
   }
 }
 
-module.exports = { createProducto, listProductos, getProducto, updateProducto, getCategorias, deleteProducto, createCategoria, getCategoriasDetalle };
+module.exports = { createProducto, listProductos, getProducto, updateProducto, getCategorias, deleteProducto, createCategoria, getCategoriasDetalle, updateCategoria, deleteCategoria };
 
 async function createCategoria(req, res) {
   try {
@@ -119,6 +119,42 @@ async function getCategoriasDetalle(req, res) {
     return res.json({ success: true, categorias: rows });
   } catch (err) {
     console.error('getCategoriasDetalle error:', err);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+}
+
+async function updateCategoria(req, res) {
+  try {
+    const id = parseInt(req.params.id);
+    const { nombre, descripcion } = req.body || {};
+    if (!id || !nombre || !String(nombre).trim()) {
+      return res.status(400).json({ success: false, message: 'Id y nombre son requeridos' });
+    }
+    const updated = await service.updateCategoria({ id, nombre: String(nombre).trim(), descripcion: (descripcion || '').trim() });
+    return res.json({ success: true, categoria: updated });
+  } catch (err) {
+    if (err && err.code === 'CATEGORY_EXISTS') {
+      return res.status(409).json({ success: false, message: 'La categoria ya existe' });
+    }
+    if (err && err.code === 'NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'Categoria no encontrada' });
+    }
+    console.error('updateCategoria error:', err);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+}
+
+async function deleteCategoria(req, res) {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: 'Id requerido' });
+    await service.deleteCategoria(id);
+    return res.json({ success: true, message: 'Categoria eliminada' });
+  } catch (err) {
+    if (err && err.code === 'NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'Categoria no encontrada' });
+    }
+    console.error('deleteCategoria error:', err);
     return res.status(500).json({ success: false, message: 'Error interno del servidor' });
   }
 }

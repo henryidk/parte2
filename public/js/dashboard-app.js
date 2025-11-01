@@ -844,17 +844,28 @@
     if (categoryFormMode === 'edit') {
       const category = getCategoryById(categoryTargetId);
       if (!category) {
-        setCategoryFormMessage('error', 'La categora seleccionada ya no existe.');
+        setCategoryFormMessage('error', 'La categoria seleccionada ya no existe.');
         return;
       }
-
-      category.name = name;
-      category.description = description;
-      // Mantener color y productosCount existentes (se gestionan en otros flujos)
-
-      renderCategorias();
-      showToast('Categora actualizada.', 'success');
-      modalManager.close('categoryModal');
+      fetch(`/api/productos/catalogo/categorias/${encodeURIComponent(categoryTargetId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: name, descripcion: description })
+      })
+      .then(async resp => {
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.success) throw new Error(data.message || `Error HTTP ${resp.status}`);
+        // Actualizar estado local
+        category.name = name;
+        category.description = description;
+        renderCategorias();
+        showToast('Categoria actualizada.', 'success');
+        modalManager.close('categoryModal');
+      })
+      .catch(err => {
+        const msg = (err && err.message || '').toLowerCase().includes('existe') ? 'Ya existe una categoria con ese nombre.' : (err.message || 'No se pudo actualizar la categoria');
+        setCategoryFormMessage('error', msg);
+      });
       return;
     }
 
@@ -870,8 +881,9 @@
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || !data.success) throw new Error(data.message || `Error HTTP ${resp.status}`);
 
-      // Actualizar UI localmente (mantener color y conteo)
-      const newId = generateUniqueCategoryId(name);
+      // Usar el id real de BD si viene; si no, generar uno local
+      const dbId = data.categoria?.id;
+      const newId = String(dbId != null ? dbId : generateUniqueCategoryId(name));
       const newCategory = { id: newId, slug: newId, name, description, color: getRandomCategoryColor(), productsCount: 0 };
       categoryState.push(newCategory);
       renderCategorias();
@@ -1116,12 +1128,21 @@
       showToast('La categora ya no existe.', 'error');
       return;
     }
-
-    categoryState.splice(index, 1);
-    renderCategorias();
-    modalManager.close('categoryDeleteModal');
-    showToast('Categora eliminada.', 'success');
-    categoryTargetId = null;
+    const id = categoryTargetId;
+    fetch(`/api/productos/catalogo/categorias/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      .then(async resp => {
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.success) throw new Error(data.message || `Error HTTP ${resp.status}`);
+        categoryState.splice(index, 1);
+        renderCategorias();
+        modalManager.close('categoryDeleteModal');
+        showToast('Categoria eliminada.', 'success');
+        categoryTargetId = null;
+      })
+      .catch(err => {
+        console.error('Error eliminando categoria:', err);
+        showToast(err.message || 'No se pudo eliminar la categoria', 'error');
+      });
   }
 
   function escapeHtml(value) {
@@ -2998,8 +3019,8 @@
     return 'success';
   }
 
-  // Refuerzos de filtrado para catálogo de productos
-  let productsForcedCategory = '';
+  // Refuerzos de filtrado para catálogo de productos (usar var para evitar TDZ)
+  var productsForcedCategory = '';
 
   // Refresca la tabla de productos combinando base + agregados en memoria
   async function refreshProductTable() {
@@ -3028,7 +3049,8 @@
       estado = 'Stock critico';
     }
     // Usar categoría forzada (cuando venimos desde "Ver en productos") si existe
-    const categoria = (productsForcedCategory || (catSel?.value || '')).toString();
+    const forcedCat = (typeof productsForcedCategory !== 'undefined' && productsForcedCategory) ? productsForcedCategory : '';
+    const categoria = (forcedCat || (catSel?.value || '')).toString();
     const params = new URLSearchParams({
       page: String(productsPager.page || 1),
       limit: String(productsPager.pageSize || 10),

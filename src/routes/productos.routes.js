@@ -29,6 +29,8 @@ router.get('/', controller.listProductos);
 router.get('/catalogo/categorias', controller.getCategorias);
 router.get('/catalogo/categorias/detalle', controller.getCategoriasDetalle);
 router.post('/catalogo/categorias', controller.createCategoria);
+router.put('/catalogo/categorias/:id', controller.updateCategoria);
+router.delete('/catalogo/categorias/:id', controller.deleteCategoria);
 router.get('/:codigo', controller.getProducto);
 router.put('/:codigo', controller.updateProducto);
 router.delete('/:codigo', controller.deleteProducto);

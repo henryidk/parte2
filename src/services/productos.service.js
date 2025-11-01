@@ -337,3 +337,56 @@ async function deleteProductoByCodigo(codigo) {
 
 module.exports = { createProducto, listProductos, getProductoByCodigo, updateProductoByCodigo, getCategorias, deleteProductoByCodigo, createCategoria, getCategoriasDetalle };
 
+
+async function updateCategoria({ id, nombre, descripcion = '' }) {
+  const p = await getDbPool();
+  const catId = parseInt(id);
+  if (!catId) { const e = new Error('Id invalido'); e.code = 'NOT_FOUND'; throw e; }
+  const name = String(nombre || '').trim();
+  const descr = String(descripcion || '').trim();
+
+  // Verificar que exista
+  const exists = await p.request().input('Id', sql.Int, catId)
+    .query('SELECT TOP 1 IdCategoria FROM inv.categorias WHERE IdCategoria = @Id');
+  if (exists.recordset.length === 0) { const e = new Error('Categoria no existe'); e.code = 'NOT_FOUND'; throw e; }
+
+  // Duplicado por nombre insensible a acentos/case, excluyendo el propio id
+  const dup = await p.request()
+    .input('Id', sql.Int, catId)
+    .input('Nombre', sql.VarChar(150), name)
+    .query("SELECT 1 FROM inv.categorias WHERE IdCategoria <> @Id AND LOWER(CONVERT(VARCHAR(100), Nombre COLLATE Latin1_General_CI_AI)) = LOWER(CONVERT(VARCHAR(100), @Nombre COLLATE Latin1_General_CI_AI))");
+  if (dup.recordset.length > 0) { const e = new Error('Categoria existente'); e.code = 'CATEGORY_EXISTS'; throw e; }
+
+  // Detectar columnas opcionales
+  const meta = await p.request().query("SELECT name FROM sys.columns WHERE object_id = OBJECT_ID('inv.categorias')");
+  const colNames = new Set(meta.recordset.map(r => (r.name || '').toString().toLowerCase()));
+  const hasDescripcion = colNames.has('descripcion');
+
+  const req = p.request();
+  req.input('Id', sql.Int, catId);
+  req.input('Nombre', sql.VarChar(150), name);
+  let setParts = ['Nombre = @Nombre'];
+  if (hasDescripcion) { req.input('Descripcion', sql.NVarChar(300), descr); setParts.push('Descripcion = @Descripcion'); }
+  await req.query(`UPDATE inv.categorias SET ${setParts.join(', ')} WHERE IdCategoria = @Id`);
+
+  return { id: catId, nombre: name, descripcion: descr };
+}
+
+async function deleteCategoria(id) {
+  const p = await getDbPool();
+  const catId = parseInt(id);
+  if (!catId) { const e = new Error('Id invalido'); e.code = 'NOT_FOUND'; throw e; }
+  const ex = await p.request().input('Id', sql.Int, catId)
+    .query('SELECT 1 FROM inv.categorias WHERE IdCategoria = @Id');
+  if (ex.recordset.length === 0) { const e = new Error('Categoria no existe'); e.code = 'NOT_FOUND'; throw e; }
+  // Borrar asociaciones M:N
+  await p.request().input('Id', sql.Int, catId)
+    .query('DELETE FROM inv.producto_categoria WHERE IdCategoria = @Id');
+  // Borrar categoria
+  await p.request().input('Id', sql.Int, catId)
+    .query('DELETE FROM inv.categorias WHERE IdCategoria = @Id');
+  return { id: catId };
+}
+
+module.exports.updateCategoria = updateCategoria;
+module.exports.deleteCategoria = deleteCategoria;
