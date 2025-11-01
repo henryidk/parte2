@@ -260,4 +260,40 @@ async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta
   return updated;
 }
 
-module.exports = { createProducto, listProductos, getProductoByCodigo, updateProductoByCodigo, getCategorias };
+async function deleteProductoByCodigo(codigo) {
+  const p = await getPool();
+  const code = String(codigo || '').trim();
+  // Obtener IdProducto
+  const prod = await p.request().input('Codigo', sql.VarChar(50), code)
+    .query('SELECT TOP 1 IdProducto, Nombre FROM inv.productos WHERE Codigo = @Codigo');
+  if (prod.recordset.length === 0) {
+    const e = new Error('Producto no encontrado'); e.code = 'NOT_FOUND'; throw e;
+  }
+  const idProd = prod.recordset[0].IdProducto;
+  const nombre = prod.recordset[0].Nombre;
+
+  // Eliminar relaciones M:N primero
+  await p.request().input('IdProducto', sql.Int, idProd)
+    .query('DELETE FROM inv.producto_categoria WHERE IdProducto = @IdProducto');
+
+  // Eliminar producto
+  await p.request().input('IdProducto', sql.Int, idProd)
+    .query('DELETE FROM inv.productos WHERE IdProducto = @IdProducto');
+
+  // Bitácora (best-effort)
+  try {
+    await p.request()
+      .input('Usuario', sql.VarChar(50), 'sistema')
+      .input('IdUsuario', sql.Int, -1)
+      .input('Operacion', sql.VarChar(40), 'DELETE')
+      .input('Entidad', sql.VarChar(40), 'inv.productos')
+      .input('ClaveEntidad', sql.VarChar(100), String(idProd))
+      .input('Detalle', sql.NVarChar(4000), `Baja de producto ${code} - ${nombre}`)
+      .query(`INSERT INTO seg.tbBitacoraTransacciones(Usuario, IdUsuario, Operacion, Entidad, ClaveEntidad, Detalle)
+              VALUES (@Usuario, @IdUsuario, @Operacion, @Entidad, @ClaveEntidad, @Detalle)`);
+  } catch (_) {}
+
+  return { codigo: code, id: idProd };
+}
+
+module.exports = { createProducto, listProductos, getProductoByCodigo, updateProductoByCodigo, getCategorias, deleteProductoByCodigo };

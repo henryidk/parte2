@@ -3672,10 +3672,26 @@
       }
     });
 
-    // Confirmar eliminacin de producto (solo UI)
-    document.getElementById('deleteProductConfirmBtn')?.addEventListener('click', () => {
-      modalManager.close('productDeleteModal');
-      showToast('Producto eliminado correctamente.', 'success');
+    // Confirmar eliminación de producto (llama backend y refresca tabla)
+    document.getElementById('deleteProductConfirmBtn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('deleteProductConfirmBtn');
+      const code = (typeof productTargetCode === 'string' ? productTargetCode : '').trim();
+      if (!code) { showToast('No hay producto seleccionado.','warning'); return; }
+      const old = btn ? btn.innerHTML : '';
+      if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Eliminando...'; }
+      try {
+        const resp = await fetch(`/api/productos/${encodeURIComponent(code)}`, { method: 'DELETE' });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.success) throw new Error(data.message || `Error HTTP ${resp.status}`);
+        showToast('Producto eliminado correctamente.', 'success');
+        await refreshProductTable();
+      } catch (err) {
+        console.error('Error eliminando producto:', err);
+        showToast(err.message || 'No se pudo eliminar el producto', 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = old; }
+        modalManager.close('productDeleteModal');
+      }
     });
 
     // Guardar edicin

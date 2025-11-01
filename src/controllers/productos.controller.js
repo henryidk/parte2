@@ -79,4 +79,19 @@ async function getCategorias(req, res) {
   }
 }
 
-module.exports = { createProducto, listProductos, getProducto, updateProducto, getCategorias };
+async function deleteProducto(req, res) {
+  try {
+    const { codigo } = req.params;
+    if (!codigo) return res.status(400).json({ success: false, message: 'Código requerido' });
+    await service.deleteProductoByCodigo(codigo);
+    return res.json({ success: true, message: 'Producto eliminado' });
+  } catch (err) {
+    if (err && err.code === 'NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+    }
+    console.error('deleteProducto error:', err);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+}
+
+module.exports = { createProducto, listProductos, getProducto, updateProducto, getCategorias, deleteProducto };

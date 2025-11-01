@@ -29,5 +29,6 @@ router.get('/', controller.listProductos);
 router.get('/catalogo/categorias', controller.getCategorias);
 router.get('/:codigo', controller.getProducto);
 router.put('/:codigo', controller.updateProducto);
+router.delete('/:codigo', controller.deleteProducto);
 
 module.exports = router;
