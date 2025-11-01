@@ -2270,17 +2270,19 @@
     const saveBtn = document.getElementById('assocSaveBtn');
     if (!productInput || !grid) return;
 
-    // Poblar productos (estticos)
-    const products = (data?.list || []).map(p => ({ code: p.code, name: p.name, categories: p.categories || [] }));
-    let currentProduct = products[0] || { code: '', name: '', categories: [] };
-    // Prefill input para dar pista
-    if (currentProduct.code) {
-      productInput.value = currentProduct.code + '  ' + currentProduct.name;
-    }
+    let currentProduct = { code: '', name: '', categories: [] };
+    // Prefill
+    productInput.value = '';
 
-    // Poblar grid de categoras como chips seleccionables con paginacin
-    const allCategories = (DASHBOARD_DATA.admin?.categorias?.list || []).map(c => c.name);
-    let filtered = allCategories.slice();
+    // Cargar categorías desde backend
+    let allCategories = [];
+    fetch('/api/productos/catalogo/categorias')
+      .then(r => r.json())
+      .then(d => { allCategories = Array.isArray(d?.categorias) ? d.categorias : []; filtered = allCategories.slice(); renderPaged(); })
+      .catch(() => { allCategories = []; filtered = []; renderPaged(); });
+
+    // Estado de selección con nombres canónicos
+    let filtered = [];
     let page = 1;
     const pageSize = 10;
     let selectedSet = new Set();
@@ -2336,7 +2338,7 @@
 
     const updateSummary = (prod, set) => {
       if (summary) {
-        summary.value = prod.code + ' | ' + set.size + ' categora(s) seleccionada(s)';
+        summary.value = (prod.code ? (prod.code + ' | ') : '') + set.size + ' categoría(s) seleccionada(s)';
       }
       if (message) {
         message.className = 'message-container';
@@ -2344,9 +2346,8 @@
       }
     };
 
-    const refreshForProduct = code => {
-      const prod = products.find(p => p.code === code) || products[0];
-      const set = new Set((prod.categories || []).map(x => x.toString().toLowerCase()));
+    const refreshForProduct = (prod) => {
+      const set = new Set((prod.categories || []).map(x => x.toString()));
       renderGrid(set);
       updateSummary(prod, set);
       // Controles
@@ -2377,27 +2378,24 @@
       };
     };
 
-    // Autocompletado de producto (por cdigo o nombre)
+    // Autocompletado de producto (por código o nombre) con backend
     function renderProductResults(term) {
       if (!resultsBox) return;
-      const t = (term || '').toLowerCase().trim();
-      let matches = products;
-      if (t) {
-        matches = products.filter(p => p.code.toLowerCase().includes(t) || p.name.toLowerCase().includes(t));
-      }
-      matches = matches.slice(0, 8);
-      if (matches.length === 0) {
-        resultsBox.style.display = 'none';
-        resultsBox.innerHTML = '';
-        return;
-      }
-      resultsBox.innerHTML = matches.map(p => `
-        <div class="result-item" data-code="${p.code}" style="padding:10px 12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
-          <span>${p.code}  ${p.name}</span>
-          <i class="fas fa-arrow-turn-down"></i>
-        </div>
-      `).join('');
-      resultsBox.style.display = 'block';
+      const t = (term || '').trim();
+      if (!t) { resultsBox.style.display='none'; resultsBox.innerHTML=''; return; }
+      fetch(`/api/productos?search=${encodeURIComponent(t)}&limit=8`)
+        .then(r => r.json())
+        .then(d => {
+          const matches = Array.isArray(d?.data) ? d.data : [];
+          if (matches.length === 0) { resultsBox.style.display='none'; resultsBox.innerHTML=''; return; }
+          resultsBox.innerHTML = matches.map(r => `
+            <div class="result-item" data-code="${r.Codigo}" data-name="${r.Nombre}" style="padding:10px 12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+              <span>${r.Codigo}  ${r.Nombre}</span>
+              <i class="fas fa-arrow-turn-down"></i>
+            </div>`).join('');
+          resultsBox.style.display='block';
+        })
+        .catch(() => { resultsBox.style.display='none'; resultsBox.innerHTML=''; });
     }
 
     productInput.addEventListener('input', () => {
@@ -2405,6 +2403,26 @@
     });
     productInput.addEventListener('focus', () => {
       renderProductResults(productInput.value);
+    });
+    // Al presionar Enter selecciona la primera sugerencia
+    productInput.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const first = resultsBox?.querySelector('.result-item');
+      if (!first) return;
+      const code = first.getAttribute('data-code');
+      const name = first.getAttribute('data-name') || '';
+      if (!code) return;
+      fetch(`/api/productos/${encodeURIComponent(code)}`)
+        .then(r => r.json())
+        .then(d => {
+          if (!d?.success || !d.product) return;
+          currentProduct = { code: d.product.codigo, name: d.product.nombre, categories: d.product.categorias || [] };
+          productInput.value = currentProduct.code + ' | ' + currentProduct.name;
+          resultsBox.style.display = 'none';
+          refreshForProduct(currentProduct);
+        })
+        .catch(() => { /* noop */ });
     });
     document.addEventListener('click', (e) => {
       if (!resultsBox.contains(e.target) && e.target !== productInput) {
@@ -2415,30 +2433,42 @@
       const item = e.target.closest('.result-item');
       if (!item) return;
       const code = item.getAttribute('data-code');
-      const prod = products.find(p => p.code === code);
-      if (!prod) return;
-      currentProduct = prod;
-      productInput.value = prod.code + ' | ' + prod.name;
-      resultsBox.style.display = 'none';
-      refreshForProduct(prod.code);
+      const name = item.getAttribute('data-name') || '';
+      fetch(`/api/productos/${encodeURIComponent(code)}`)
+        .then(r => r.json())
+        .then(d => {
+          if (!d?.success || !d.product) return;
+          currentProduct = { code: d.product.codigo, name: d.product.nombre, categories: d.product.categorias || [] };
+          productInput.value = currentProduct.code + ' | ' + currentProduct.name;
+          resultsBox.style.display = 'none';
+          refreshForProduct(currentProduct);
+        })
+        .catch(() => { resultsBox.style.display='none'; });
     });
 
-    // Inicializar con primer producto
-    if (currentProduct.code) {
-      refreshForProduct(currentProduct.code);
-    }
+    // Inicialmente, solo categorías y grid vacíos
+    selectedSet.clear();
+    renderGrid(selectedSet);
 
-    // Guardar asociacin (solo UI)
+    // Guardar asociación en BD
     saveBtn?.addEventListener('click', () => {
+      if (!currentProduct.code) { showToast('Selecciona un producto primero.','warning'); return; }
+      const categorias = Array.from(selectedSet);
       saveBtn.disabled = true;
-      saveBtn.setAttribute('data-loading', 'true');
+      saveBtn.setAttribute('data-loading','true');
+      const old = saveBtn.innerHTML;
       saveBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Guardando...';
-      setTimeout(() => {
-        saveBtn.disabled = false;
-        saveBtn.removeAttribute('data-loading');
-        saveBtn.innerHTML = '<i class="fas fa-save"></i> Guardar asociacin';
-        showToast('Asociacin actualizada correctamente.', 'success');
-      }, 800);
+      fetch(`/api/productos/${encodeURIComponent(currentProduct.code)}`, {
+        method: 'PUT', headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ categorias })
+      })
+      .then(r => r.json())
+      .then(d => {
+        if (!d?.success) throw new Error(d?.message || 'No se pudo guardar');
+        showToast('Asociación actualizada correctamente.','success');
+      })
+      .catch(err => showToast(err.message || 'Error guardando asociación','error'))
+      .finally(() => { saveBtn.disabled=false; saveBtn.removeAttribute('data-loading'); saveBtn.innerHTML = old; });
     });
   }
 
