@@ -101,14 +101,22 @@ async function listProductos({ page = 1, limit = 10, search = '', estado = '', c
     params.push({ name: 'e', type: sql.VarChar(20), value: String(estado).trim() });
   }
   if (categoria && String(categoria).trim()) {
-    // Filtro robusto: existencia en la relación M:N por nombre exacto
-    whereParts.push(`EXISTS (
-        SELECT 1
-        FROM inv.producto_categoria pc
-        JOIN inv.categorias c ON c.IdCategoria = pc.IdCategoria
-        WHERE pc.IdProducto = v.IdProducto AND c.Nombre = @c
-      )`);
-    params.push({ name: 'c', type: sql.VarChar(100), value: String(categoria).trim() });
+    const cval = String(categoria).trim();
+    if (cval === '__NONE__') {
+      // Productos sin categorías asociadas (relación M:N)
+      whereParts.push(`NOT EXISTS (
+          SELECT 1 FROM inv.producto_categoria pc WHERE pc.IdProducto = v.IdProducto
+        )`);
+    } else {
+      // Filtro robusto: existencia en la relación M:N por nombre exacto
+      whereParts.push(`EXISTS (
+          SELECT 1
+          FROM inv.producto_categoria pc
+          JOIN inv.categorias c ON c.IdCategoria = pc.IdCategoria
+          WHERE pc.IdProducto = v.IdProducto AND c.Nombre = @c
+        )`);
+      params.push({ name: 'c', type: sql.VarChar(100), value: cval });
+    }
   }
   const where = `WHERE ${whereParts.join(' AND ')}`;
 

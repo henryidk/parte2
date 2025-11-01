@@ -2204,7 +2204,10 @@
         .then(r => r.json())
         .then(data => {
           const cats = Array.isArray(data?.categorias) ? data.categorias : [];
-          selCat.innerHTML = '<option value="">Todas</option>' + cats.map(n => `<option value="${n}">${n}</option>`).join('');
+          // Insertar opción especial para "Sin categoría"
+          const opts = ['<option value="">Todas</option>', '<option value="__NONE__">Sin categoría</option>']
+            .concat(cats.map(n => `<option value="${n}">${n}</option>`));
+          selCat.innerHTML = opts.join('');
           const opt = Array.from(selCat.options).find(o => o.value === current);
           if (opt) selCat.value = current;
         })
