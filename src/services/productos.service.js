@@ -1,25 +1,6 @@
 const { getPool: getDbPool, sql } = require('../db/pool');
 
-// Construir cadena de conexión desde env (igual que server)
-const dbServer = process.env.DB_SERVER || 'localhost\\SQLEXPRESS';
-const dbName = process.env.DB_DATABASE || 'DB_parte2';
-const dbUser = process.env.DB_USER || '';
-const dbPass = process.env.DB_PASSWORD || '';
-const odbcDriver = process.env.ODBC_DRIVER || 'ODBC Driver 17 for SQL Server';
-const encryptYes = String(process.env.DB_ENCRYPT || 'No').toLowerCase() === 'yes';
-const trustCertYes = String(process.env.DB_TRUST_CERT || 'Yes').toLowerCase() === 'yes';
-const useTrusted = !dbUser || !dbPass;
-const connectionString = `Driver={${odbcDriver}};Server=${dbServer};Database=${dbName};` +
-  (useTrusted ? 'Trusted_Connection=Yes;' : `Trusted_Connection=No;Uid=${dbUser};Pwd=${dbPass};`) +
-  `Encrypt=${encryptYes ? 'Yes' : 'No'};TrustServerCertificate=${trustCertYes ? 'Yes' : 'No'};`;
-
-let pool;
-async function getPool() {
-  if (!pool) {
-    pool = await sql.connect({ connectionString });
-  }
-  return pool;
-}
+// Pool de BD centralizado en ../db/pool (getDbPool)
 
 function generateCode(nombre) {
   const base = (nombre || 'PRD').toString().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 8) || 'PRD';
@@ -261,7 +242,7 @@ async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta
 }
 
 async function deleteProductoByCodigo(codigo) {
-  const p = await getPool();
+  const p = await getDbPool();
   const code = String(codigo || '').trim();
   // Obtener IdProducto
   const prod = await p.request().input('Codigo', sql.VarChar(50), code)

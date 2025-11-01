@@ -2332,7 +2332,7 @@
         chip.style.borderColor = selected ? '#bfdbfe' : '#e2e8f0';
         if (selected) selectedSet.add(k); else selectedSet.delete(k);
         const code = currentProduct?.code || '';
-        if (summary) summary.value = code + ' | ' + selectedSet.size + ' categora(s) seleccionada(s)';
+        if (summary) summary.value = code + ' | ' + selectedSet.size + ' categoria(s) seleccionada(s)';
       };
     };
 
@@ -4435,5 +4435,6 @@ window.resetReportBaseLayout = function () {
     ].join('');
   } catch (e) { }
 };
+
 
 

@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+﻿const nodemailer = require('nodemailer');
 const crypto = require('crypto'); 
 const rateLimit = require('express-rate-limit');
 const { verifyRecaptcha } = require('./src/middlewares/recaptcha');
@@ -25,25 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 
-// Configuración de conexión a SQL Server desde .env
-const dbServer = process.env.DB_SERVER || 'localhost\\SQLEXPRESS';
-const dbName = process.env.DB_DATABASE || 'DB_parte2';
-const dbUser = process.env.DB_USER || '';
-const dbPass = process.env.DB_PASSWORD || '';
-const odbcDriver = process.env.ODBC_DRIVER || 'ODBC Driver 17 for SQL Server';
-const encryptYes = String(process.env.DB_ENCRYPT || 'No').toLowerCase() === 'yes';
-const trustCertYes = String(process.env.DB_TRUST_CERT || 'Yes').toLowerCase() === 'yes';
-
-const useTrusted = !dbUser || !dbPass;
-const dbConfig = {
-    connectionString:
-        `Driver={${odbcDriver}};Server=${dbServer};Database=${dbName};` +
-        (useTrusted ? 'Trusted_Connection=Yes;' : `Trusted_Connection=No;Uid=${dbUser};Pwd=${dbPass};`) +
-        `Encrypt=${encryptYes ? 'Yes' : 'No'};TrustServerCertificate=${trustCertYes ? 'Yes' : 'No'};`
-};
-
-
-// Uso de pool compartido vía getPool()
+// Uso de pool compartido vÃ­a getPool()
 let pool; // declarado solo para compatibilidad con manejadores antiguos
 //LOGIN
 app.get('/', (req, res) => {
@@ -62,12 +44,12 @@ app.post('/api/login', verifyRecaptcha, async (req, res) => {
   try {
     const { usuario, password } = req.body;
 
-    console.log('🔐 Login attempt for user:', usuario);
+    console.log('Login attempt for user:', usuario);
 
     if (!usuario || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Usuario y contraseña requeridos'
+        message: 'Usuario y contrasena requeridos'
       });
     }
 
@@ -82,7 +64,7 @@ app.post('/api/login', verifyRecaptcha, async (req, res) => {
       const userData = result.recordset[0];
 
       if (userData.Resultado === 'OK') {
-        console.log('✅ Login successful for:', userData.Usuario, '- Role:', userData.Rol);
+        console.log('Login successful for:', userData.Usuario, '- Role:', userData.Rol);
         return res.json({
           success: true,
           message: userData.Mensaje,
@@ -97,7 +79,7 @@ app.post('/api/login', verifyRecaptcha, async (req, res) => {
           }
         });
       } else {
-        console.log('❌ Login failed for:', usuario, '- Reason:', userData.Mensaje);
+        console.log('Login failed for:', usuario, '- Reason:', userData.Mensaje);
         return res.status(401).json({ success: false, message: userData.Mensaje });
       }
     }
@@ -110,10 +92,10 @@ app.post('/api/login', verifyRecaptcha, async (req, res) => {
   }
 });
 
-// Ruta para obtener estadísticas del dashboard
+// Ruta para obtener estadÃ­sticas del dashboard
 app.get('/api/dashboard-stats', async (req, res) => {
     try {
-        console.log('📊 Obteniendo estadísticas del dashboard...');
+        console.log('Obteniendo estadisticas del dashboard...');
 
         const pool = await getPool();
         const [usuariosTotal, usuariosActivos, accesosOKHoy, accesosFailHoy, ultimosAccesos] = await Promise.all([
@@ -149,11 +131,11 @@ app.get('/api/dashboard-stats', async (req, res) => {
             }
         };
 
-        console.log('✅ Estadísticas obtenidas:', stats);
+        console.log('Estadisticas obtenidas:', stats);
         res.json({ success: true, stats });
     } catch (error) {
-        console.error('❌ Error obteniendo estadísticas:', error);
-        res.status(500).json({ success: false, message: 'Error obteniendo estadísticas del dashboard' });
+        console.error('Error obteniendo estadisticas:', error);
+        res.status(500).json({ success: false, message: 'Error obteniendo estadÃ­sticas del dashboard' });
     }
 });
 
@@ -162,14 +144,14 @@ app.get('/api/dashboard-stats', async (req, res) => {
 
 
 
-// Ruta para crear usuarios con contraseña temporal
+// Ruta para crear usuarios con Contrasena temporal
 app.post('/api/usuarios', async (req, res) => {
     try {
         const { usuarioEjecutor, nombres, apellido, email, rol, password } = req.body;
 
-        console.log('👤 Creando nuevo usuario:');
-        console.log('📋 Datos recibidos:', { usuarioEjecutor, nombres, apellido, email, rol, hasPassword: !!password });
-        console.log('📋 Body completo:', req.body);
+        console.log('Creando nuevo usuario:');
+        console.log('Datos recibidos:', { usuarioEjecutor, nombres, apellido, email, rol, hasPassword: !!password });
+        console.log('Body completo:', req.body);
 
         // Validar datos de entrada
         if (!usuarioEjecutor || !nombres || !apellido || !email || !rol || !password) {
@@ -184,24 +166,22 @@ app.post('/api/usuarios', async (req, res) => {
         if (!emailRegex.test(email)) {
             return res.status(400).json({
                 success: false,
-                message: 'El formato del correo electrónico no es válido'
+                message: 'El formato del correo electronico no es valido'
             });
         }
 
-        // Validar rol válido
+        // Validar rol valido
         if (!['admin', 'secretaria'].includes(rol)) {
             return res.status(400).json({
                 success: false,
-                message: 'Rol inválido. Debe ser admin o secretaria'
+                message: 'Rol invalido. Debe ser admin o secretaria'
             });
         }
 
         // Conectar a la base de datos
-        if (!pool) {
-            pool = await sql.connect(dbConfig);
-        }
+        const pool = await getPool();
 
-        // Generar nombre de usuario automáticamente
+        // Generar nombre de usuario automaticamente
         const usuario = (nombres.substring(0, 3) + apellido.substring(0, 3)).toLowerCase().replace(/\s/g, '');
 
         // Usar el SP disponible en DB_pt2.sql (sp_RegistrarUsuario)
@@ -217,10 +197,10 @@ app.post('/api/usuarios', async (req, res) => {
 
         const result = await request.execute('seg.sp_RegistrarUsuario');
 
-        console.log('📋 Resultado alta usuario:', { returnValue: result.returnValue, mensaje: result.output.Mensaje });
+        console.log('Resultado alta usuario:', { returnValue: result.returnValue, mensaje: result.output.Mensaje });
 
         if (result.returnValue === 0) {
-            // Marcar contraseña como temporal (24h) para forzar cambio en primer login
+            // Marcar Contrasena como temporal (24h) para forzar cambio en primer login
             const fechaExpira = new Date();
             fechaExpira.setHours(fechaExpira.getHours() + 24);
 
@@ -234,7 +214,7 @@ app.post('/api/usuarios', async (req, res) => {
                     WHERE Usuario = @Usuario
                 `);
 
-            // Éxito
+            // Ã‰xito
             res.json({
                 success: true,
                 message: result.output.Mensaje,
@@ -256,9 +236,9 @@ app.post('/api/usuarios', async (req, res) => {
         }
 
     } catch (error) {
-        console.error('❌ Error creando usuario:', error);
-        console.error('❌ Stack trace:', error.stack);
-        console.error('❌ Detalles completos del error:', {
+        console.error('Error creando usuario:', error);
+        console.error('Stack trace:', error.stack);
+        console.error('Detalles completos del error:', {
             message: error.message,
             name: error.name,
             code: error.code,
@@ -275,12 +255,12 @@ app.post('/api/usuarios', async (req, res) => {
     }
 });
 
-// Ruta para cambiar contraseña (soporta nombres de SP antiguos y nuevos)
+// Ruta para cambiar Contrasena (soporta nombres de SP antiguos y nuevos)
 app.post('/api/usuarios/cambiar-password', async (req, res) => {
     try {
         const { usuario, passwordActual, passwordNueva, confirmarPassword } = req.body;
 
-        console.log('🔑 Cambiando contraseña para:', usuario);
+        console.log('ðŸ”‘ Cambiando contrasena para:', usuario);
 
         // Validar datos de entrada
         if (!usuario || !passwordActual || !passwordNueva || !confirmarPassword) {
@@ -293,7 +273,7 @@ app.post('/api/usuarios/cambiar-password', async (req, res) => {
         // Conectar a la base de datos
         const pool = await getPool();
 
-        // Construir request base (parámetros coinciden con ambos SPs)
+        // Construir request base (parÃ¡metros coinciden con ambos SPs)
         const makeRequest = () => {
             const r = pool.request();
             r.input('Usuario', sql.VarChar(50), usuario);
@@ -315,7 +295,7 @@ app.post('/api/usuarios/cambiar-password', async (req, res) => {
             result = await makeRequest().execute('seg.sp_CambiarPasswordTemporal');
         }
 
-        console.log('📋 Resultado cambio contraseña:', {
+        console.log('ðŸ“‹ Resultado cambio contrasena:', {
             returnValue: result.returnValue,
             mensaje: result.output.Mensaje
         });
@@ -326,11 +306,11 @@ app.post('/api/usuarios/cambiar-password', async (req, res) => {
 
         return res.status(400).json({
             success: false,
-            message: result.output.Mensaje || 'Error al cambiar la contraseña'
+            message: result.output.Mensaje || 'Error al cambiar la Contrasena'
         });
 
     } catch (error) {
-        console.error('❌ Error cambiando contraseña:', error);
+        console.error('âŒ Error Cambiando contrasena:', error);
         return res.status(500).json({ success: false, message: 'Error interno del servidor' });
     }
 });
@@ -341,14 +321,12 @@ app.post('/api/usuarios/cambiar-password', async (req, res) => {
 // Ruta para obtener usuarios reales de la base de datos
 app.get('/api/usuarios', async (req, res) => {
     try {
-        console.log('📋 Solicitando lista de usuarios de la BD...');
+        console.log('ðŸ“‹ Solicitando lista de usuarios de la BD...');
 
         // Conectar a la base de datos
-        if (!pool) {
-            pool = await sql.connect(dbConfig);
-        }
+        const pool = await getPool();
 
-        // Consulta para obtener usuarios (ACTIVOS e INACTIVOS, no eliminados físicamente)
+        // Consulta para obtener usuarios (ACTIVOS e INACTIVOS, no eliminados fÃ­sicamente)
         const result = await pool.request().query(`
             SELECT
                 u.IdUsuario,
@@ -369,7 +347,7 @@ app.get('/api/usuarios', async (req, res) => {
             ORDER BY u.FechaCreacion DESC
         `);
 
-        console.log(`✅ Encontrados ${result.recordset.length} usuarios en la BD`);
+        console.log(`âœ… Encontrados ${result.recordset.length} usuarios en la BD`);
 
         // Formatear datos para el frontend
         const usuarios = result.recordset.map(user => ({
@@ -402,7 +380,7 @@ app.get('/api/usuarios', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error obteniendo usuarios:', error);
+        console.error('âŒ Error obteniendo usuarios:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor',
@@ -412,18 +390,16 @@ app.get('/api/usuarios', async (req, res) => {
     }
 });
 
-// Ruta para obtener un usuario específico por ID
+// Ruta para obtener un usuario especÃ­fico por ID
 app.get('/api/usuarios/:id', async (req, res) => {
     try {
         const userId = parseInt(req.params.id);
-        console.log(`📋 Obteniendo usuario ID: ${userId}`);
+        console.log(`ðŸ“‹ Obteniendo usuario ID: ${userId}`);
 
         // Conectar a la base de datos
-        if (!pool) {
-            pool = await sql.connect(dbConfig);
-        }
+        const pool = await getPool();
 
-        // Consulta para obtener usuario específico con su último acceso
+        // Consulta para obtener usuario especÃ­fico con su Ãºltimo acceso
         const result = await pool.request()
             .input('UserId', sql.Int, userId)
             .query(`
@@ -492,7 +468,7 @@ app.get('/api/usuarios/:id', async (req, res) => {
                 }) : 'Nunca'
         };
 
-        console.log(`✅ Usuario ${userId} encontrado: ${userData.nombreCompleto}`);
+        console.log(`âœ… Usuario ${userId} encontrado: ${userData.nombreCompleto}`);
 
         res.json({
             success: true,
@@ -500,7 +476,7 @@ app.get('/api/usuarios/:id', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error obteniendo usuario:', error);
+        console.error('âŒ Error obteniendo usuario:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor'
@@ -508,13 +484,13 @@ app.get('/api/usuarios/:id', async (req, res) => {
     }
 });
 
-// Ruta para eliminar usuario (DELETE) - eliminación definitiva (solo admin)
+// Ruta para eliminar usuario (DELETE) - eliminaciÃ³n definitiva (solo admin)
 app.delete('/api/usuarios/:id', async (req, res) => {
     try {
         const userId = parseInt(req.params.id);
         const { usuarioEjecutor } = req.body;
 
-        console.log('🗑️ Eliminando usuario:', { userId, usuarioEjecutor });
+        console.log('ðŸ—‘ï¸ Eliminando usuario:', { userId, usuarioEjecutor });
 
         // Validar datos de entrada
         if (!usuarioEjecutor) {
@@ -536,7 +512,7 @@ app.delete('/api/usuarios/:id', async (req, res) => {
             return res.status(403).json({ success: false, message: 'Solo un administrador activo puede eliminar usuarios' });
         }
 
-        // 2) Obtener datos del usuario a eliminar para bitácora
+        // 2) Obtener datos del usuario a eliminar para bitÃ¡cora
         const userQ = await pool.request()
             .input('IdUsuario', sql.Int, userId)
             .query('SELECT Usuario, Nombres, Apellidos FROM seg.tbUsuario WHERE IdUsuario=@IdUsuario');
@@ -545,19 +521,19 @@ app.delete('/api/usuarios/:id', async (req, res) => {
         }
         const toDelete = userQ.recordset[0];
 
-        // 3) Eliminación definitiva
+        // 3) EliminaciÃ³n definitiva
         await pool.request()
             .input('IdUsuario', sql.Int, userId)
             .query('DELETE FROM seg.tbUsuario WHERE IdUsuario=@IdUsuario');
 
-        // 4) Bitácora
+        // 4) BitÃ¡cora
         await pool.request()
             .input('Usuario', sql.VarChar(50), usuarioEjecutor)
             .input('IdUsuario', sql.Int, userId)
             .input('Operacion', sql.VarChar(30), 'DELETE_USER')
             .input('Entidad', sql.VarChar(30), 'tbUsuario')
             .input('Clave', sql.VarChar(100), `IdUsuario=${userId}`)
-            .input('Detalle', sql.NVarChar(4000), `Eliminación definitiva de usuario ${toDelete.Usuario} (${toDelete.Nombres} ${toDelete.Apellidos})`)
+            .input('Detalle', sql.NVarChar(4000), `EliminaciÃ³n definitiva de usuario ${toDelete.Usuario} (${toDelete.Nombres} ${toDelete.Apellidos})`)
             .query(`
                 INSERT INTO seg.tbBitacoraTransacciones(Usuario, IdUsuario, Operacion, Entidad, ClaveEntidad, Detalle)
                 VALUES(@Usuario, (SELECT IdUsuario FROM seg.tbUsuario WHERE Usuario=@Usuario), @Operacion, @Entidad, @Clave, @Detalle)
@@ -566,7 +542,7 @@ app.delete('/api/usuarios/:id', async (req, res) => {
         res.json({ success: true, message: 'Usuario eliminado definitivamente' });
 
     } catch (error) {
-        console.error('❌ Error eliminando usuario:', error);
+        console.error('âŒ Error eliminando usuario:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor'
@@ -587,7 +563,7 @@ app.put('/api/usuarios/:id', async (req, res) => {
             estado
         } = req.body;
 
-        console.log('📝 Actualizando usuario:', { userId, usuarioEjecutor, nombres, apellido, email, rol, estado });
+        console.log('ðŸ“ Actualizando usuario:', { userId, usuarioEjecutor, nombres, apellido, email, rol, estado });
 
         // Validar datos de entrada
         if (!usuarioEjecutor || !nombres || !apellido || !email || !rol || estado === undefined) {
@@ -637,14 +613,14 @@ app.put('/api/usuarios/:id', async (req, res) => {
                 WHERE IdUsuario=@IdUsuario
             `);
 
-        // Bitácora
+        // BitÃ¡cora
         await pool.request()
             .input('Usuario', sql.VarChar(50), usuarioEjecutor)
             .input('IdUsuario', sql.Int, userId)
             .input('Operacion', sql.VarChar(30), 'UPDATE_USER')
             .input('Entidad', sql.VarChar(30), 'tbUsuario')
             .input('Clave', sql.VarChar(100), `IdUsuario=${userId}`)
-            .input('Detalle', sql.NVarChar(4000), `Actualización de usuario (${currentUsuario})`)
+            .input('Detalle', sql.NVarChar(4000), `ActualizaciÃ³n de usuario (${currentUsuario})`)
             .query(`
                 INSERT INTO seg.tbBitacoraTransacciones(Usuario, IdUsuario, Operacion, Entidad, ClaveEntidad, Detalle)
                 VALUES(@Usuario, (SELECT IdUsuario FROM seg.tbUsuario WHERE Usuario=@Usuario), @Operacion, @Entidad, @Clave, @Detalle)
@@ -653,7 +629,7 @@ app.put('/api/usuarios/:id', async (req, res) => {
         res.json({ success: true, message: 'Usuario actualizado' });
 
     } catch (error) {
-        console.error('❌ Error actualizando usuario:', error);
+        console.error('âŒ Error actualizando usuario:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor'
@@ -661,19 +637,19 @@ app.put('/api/usuarios/:id', async (req, res) => {
     }
 });
 
-// Ruta para resetear contraseña de usuario
+// Ruta para resetear Contrasena de usuario
 app.post('/api/usuarios/:id/reset-password', async (req, res) => {
     try {
         const userId = parseInt(req.params.id);
         const { usuarioEjecutor, newPassword } = req.body;
 
-        console.log('🔑 Reseteando contraseña para usuario:', userId);
+        console.log('ðŸ”‘ Reseteando Contrasena para usuario:', userId);
 
         // Validar datos de entrada
         if (!usuarioEjecutor || !newPassword) {
             return res.status(400).json({
                 success: false,
-                message: 'Usuario ejecutor y nueva contraseña son requeridos'
+                message: 'Usuario ejecutor y nueva Contrasena son requeridos'
             });
         }
 
@@ -697,11 +673,11 @@ app.post('/api/usuarios/:id/reset-password', async (req, res) => {
         // Generar salt aleatorio (16 bytes)
         const salt = require('crypto').randomBytes(16);
 
-        // Calcular fecha de expiración (24 horas desde ahora)
+        // Calcular fecha de expiraciÃ³n (24 horas desde ahora)
         const fechaExpira = new Date();
         fechaExpira.setHours(fechaExpira.getHours() + 24);
 
-        // Actualizar contraseña usando la función de SQL Server para consistencia
+        // Actualizar Contrasena usando la funciÃ³n de SQL Server para consistencia
        
         const updateResult = await pool.request()
             .input('UserId', sql.Int, userId)
@@ -719,7 +695,7 @@ app.post('/api/usuarios/:id/reset-password', async (req, res) => {
                 WHERE IdUsuario = @UserId
             `);
 
-        // Registrar en bitácora
+        // Registrar en bitÃ¡cora
         const fechaExpiraFormatted = fechaExpira.toLocaleString('es-GT', {
             day: '2-digit',
             month: '2-digit',
@@ -734,21 +710,21 @@ app.post('/api/usuarios/:id/reset-password', async (req, res) => {
             .input('Operacion', sql.VarChar(30), 'RESET_PASSWORD_TEMPORAL')
             .input('Entidad', sql.VarChar(30), 'tbUsuario')
             .input('Clave', sql.VarChar(100), `IdUsuario=${userId}`)
-            .input('Detalle', sql.NVarChar(4000), `Contraseña temporal generada (expira: ${fechaExpiraFormatted}) para: ${targetUser.Nombres} ${targetUser.Apellidos} (${targetUser.Correo})`)
+            .input('Detalle', sql.NVarChar(4000), `Contrasena temporal generada (expira: ${fechaExpiraFormatted}) para: ${targetUser.Nombres} ${targetUser.Apellidos} (${targetUser.Correo})`)
             .query(`
                 INSERT INTO seg.tbBitacoraTransacciones(Usuario, IdUsuario, Operacion, Entidad, ClaveEntidad, Detalle)
                 VALUES(@Usuario, (SELECT IdUsuario FROM seg.tbUsuario WHERE Usuario = @Usuario), @Operacion, @Entidad, @Clave, @Detalle)
             `);
 
-        console.log('✅ Contraseña temporal reseteada exitosamente (expira en 24 horas)');
+        console.log('âœ… Contrasena temporal reseteada exitosamente (expira en 24 horas)');
 
         res.json({
             success: true,
-            message: `Contraseña temporal generada exitosamente para ${targetUser.Usuario}`
+            message: `Contrasena temporal generada exitosamente para ${targetUser.Usuario}`
         });
 
     } catch (error) {
-        console.error('❌ Error reseteando contraseña:', error);
+        console.error('âŒ Error reseteando Contrasena:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor'
@@ -756,13 +732,13 @@ app.post('/api/usuarios/:id/reset-password', async (req, res) => {
     }
 });
 
-// Ruta para deshabilitar usuario (eliminación lógica sin SP)
+// Ruta para deshabilitar usuario (eliminaciÃ³n lÃ³gica sin SP)
 app.post('/api/usuarios/:id/disable', async (req, res) => {
     try {
         const userId = parseInt(req.params.id);
         const { usuarioEjecutor } = req.body;
 
-        console.log('🚫 Deshabilitando usuario:', { userId, usuarioEjecutor });
+        console.log('ðŸš« Deshabilitando usuario:', { userId, usuarioEjecutor });
 
         // Validar datos de entrada
         if (!usuarioEjecutor) {
@@ -794,7 +770,7 @@ app.post('/api/usuarios/:id/disable', async (req, res) => {
         res.json({ success: true, message: 'Usuario deshabilitado' });
 
     } catch (error) {
-        console.error('❌ Error deshabilitando usuario:', error);
+        console.error('âŒ Error deshabilitando usuario:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor'
@@ -808,7 +784,7 @@ app.post('/api/usuarios/:id/enable', async (req, res) => {
         const userId = parseInt(req.params.id);
         const { usuarioEjecutor } = req.body;
 
-        console.log('✅ Rehabilitando usuario:', { userId, usuarioEjecutor });
+        console.log('âœ… Rehabilitando usuario:', { userId, usuarioEjecutor });
 
         // Validar datos de entrada
         if (!usuarioEjecutor) {
@@ -819,9 +795,7 @@ app.post('/api/usuarios/:id/enable', async (req, res) => {
         }
 
         // Conectar a la base de datos
-        if (!pool) {
-            pool = await sql.connect(dbConfig);
-        }
+        const pool = await getPool();
 
         await pool.request()
             .input('IdUsuario', sql.Int, userId)
@@ -842,7 +816,7 @@ app.post('/api/usuarios/:id/enable', async (req, res) => {
         res.json({ success: true, message: 'Usuario habilitado' });
 
     } catch (error) {
-        console.error('❌ Error rehabilitando usuario:', error);
+        console.error('âŒ Error rehabilitando usuario:', error);
         res.status(500).json({
             success: false,
             message: 'Error interno del servidor'
@@ -854,7 +828,7 @@ app.post('/api/usuarios/:id/enable', async (req, res) => {
 
 
 
-// === BITÁCORAS ===
+// === BITÃCORAS ===
 app.get('/api/bitacora/accesos', async (req, res) => {
     try {
         const {
@@ -880,11 +854,11 @@ app.get('/api/bitacora/accesos', async (req, res) => {
 
         // Filtro de fechas mejorado
         if (fechaInicio && !fechaFin) {
-            // Solo fecha inicio: mostrar solo ese día específico
+            // Solo fecha inicio: mostrar solo ese dÃ­a especÃ­fico
             where += ' AND ba.FechaHora >= @fi AND ba.FechaHora < DATEADD(day,1,@fi)';
             r.input('fi', sql.DateTime2, new Date(fechaInicio));
         } else if (!fechaInicio && fechaFin) {
-            // Solo fecha fin: mostrar hasta ese día (inclusive)
+            // Solo fecha fin: mostrar hasta ese dÃ­a (inclusive)
             where += ' AND ba.FechaHora < DATEADD(day,1,@ff)';
             r.input('ff', sql.DateTime2, new Date(fechaFin));
         } else if (fechaInicio && fechaFin) {
@@ -943,8 +917,8 @@ app.get('/api/bitacora/accesos', async (req, res) => {
             filters: { usuario, estado, fechaInicio, fechaFin }
         });
     } catch (err) {
-        console.error('Error bitácora accesos:', err);
-        res.status(500).json({ success: false, message: 'Error obteniendo bitácora de accesos' });
+        console.error('Error bitÃ¡cora accesos:', err);
+        res.status(500).json({ success: false, message: 'Error obteniendo bitÃ¡cora de accesos' });
     }
 });
 
@@ -1021,8 +995,8 @@ app.get('/api/bitacora/transacciones', async (req, res) => {
             filters: { usuario, accion, tabla, fechaInicio, fechaFin }
         });
     } catch (err) {
-        console.error('Error bitácora transacciones:', err);
-        res.status(500).json({ success: false, message: 'Error obteniendo bitácora de transacciones' });
+        console.error('Error bitÃ¡cora transacciones:', err);
+        res.status(500).json({ success: false, message: 'Error obteniendo bitÃ¡cora de transacciones' });
     }
 });
 
@@ -1039,17 +1013,17 @@ app.get('/api/bitacora/transacciones', async (req, res) => {
 
 
 
-// Endpoint para recuperación de contraseña (generar contraseña temporal)
+// Endpoint para recuperaciÃ³n de Contrasena (generar Contrasena temporal)
 app.post('/api/forgot-password', verifyRecaptcha, async (req, res) => {
     try {
         const { email } = req.body;
 
-        console.log('📧 Solicitud de recuperación de contraseña para:', email);
+        console.log('ðŸ“§ Solicitud de recuperaciÃ³n de Contrasena para:', email);
 
         if (!email) {
             return res.status(400).json({
                 success: false,
-                message: 'El correo electrónico es requerido'
+                message: 'El correo electrÃ³nico es requerido'
             });
         }
         const pool = await getPool();
@@ -1064,8 +1038,8 @@ app.post('/api/forgot-password', verifyRecaptcha, async (req, res) => {
         const mensaje = result.output.Mensaje;
 
         if (result.returnValue === 0) {
-            // Contraseña temporal generada exitosamente
-            console.log('✅ Contraseña temporal generada para:', email);
+            // Contrasena temporal generada exitosamente
+            console.log('âœ… Contrasena temporal generada para:', email);
 
             // Obtener datos del usuario para el correo
             const userRequest = pool.request();
@@ -1081,38 +1055,38 @@ app.post('/api/forgot-password', verifyRecaptcha, async (req, res) => {
                 ? userResult.recordset[0].NombreCompleto
                 : 'Usuario';
 
-            // Enviar correo electrónico con Brevo
+            // Enviar correo electrÃ³nico con Brevo
             const emailResult = await sendBrevoEmail(email, passwordTemporal);
 
             if (emailResult.success) {
-                console.log('📬 Correo enviado exitosamente');
+                console.log('ðŸ“¬ Correo enviado exitosamente');
 
-                // NUNCA mostrar la contraseña en la respuesta por seguridad
+                // NUNCA mostrar la Contrasena en la respuesta por seguridad
                 return res.json({
                     success: true,
-                    message: 'Si el correo está registrado, se ha enviado una contraseña temporal. Revisa tu bandeja de entrada.'
+                    message: 'Si el correo estÃ¡ registrado, se ha enviado una Contrasena temporal. Revisa tu bandeja de entrada.'
                 });
             } else {
-                console.error('❌ Error enviando correo:', emailResult.error);
+                console.error('âŒ Error enviando correo:', emailResult.error);
                 return res.status(500).json({
                     success: false,
-                    message: 'Contraseña temporal generada, pero hubo un error enviando el correo'
+                    message: 'Contrasena temporal generada, pero hubo un error enviando el correo'
                 });
             }
 
         } else {
-            // Error generando contraseña temporal (no revelar si el correo existe)
-            console.log('❌ Error generando contraseña temporal:', mensaje);
+            // Error generando Contrasena temporal (no revelar si el correo existe)
+            console.log('âŒ Error generando Contrasena temporal:', mensaje);
 
-            // Respuesta genérica por seguridad - no revelar si el correo existe
+            // Respuesta genÃ©rica por seguridad - no revelar si el correo existe
             return res.json({
                 success: true,
-                message: 'Si el correo está registrado, se ha enviado una contraseña temporal. Revisa tu bandeja de entrada.'
+                message: 'Si el correo estÃ¡ registrado, se ha enviado una Contrasena temporal. Revisa tu bandeja de entrada.'
             });
         }
 
     } catch (error) {
-        console.error('❌ Error en recuperación de contraseña:', error);
+        console.error('âŒ Error en recuperaciÃ³n de Contrasena:', error);
         return res.status(500).json({
             success: false,
             message: 'Error interno del servidor'
@@ -1123,27 +1097,28 @@ app.post('/api/forgot-password', verifyRecaptcha, async (req, res) => {
 // Inicializar el servidor
 async function startServer() {
     try {
-        // Probar conexión a la base de datos
+        // Probar conexiÃ³n a la base de datos
         console.log('Conectando a SQL Server...');
-        await getPool();
-        console.log('✅ Conexión a SQL Server establecida');
+        const p = await getPool();
+        pool = p;
+        console.log('Conexion a SQL Server establecida');
 
         // Iniciar servidor
         app.listen(PORT, () => {
-            console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-            console.log(`📊 Base de datos conectada: AcademicoDB`);
-            console.log(`🔐 reCAPTCHA habilitado en login y recuperación de contraseña`);
+            console.log('Servidor corriendo en http://localhost:' + PORT);
+            console.log('Base de datos conectada');
+            console.log('reCAPTCHA habilitado en login y recuperacion de contrasena');
         });
 
     } catch (error) {
-        console.error('❌ Error al iniciar el servidor:', error);
+        console.error('âŒ Error al iniciar el servidor:', error);
         process.exit(1);
     }
 }
 
-// Manejo de errores de conexión
+// Manejo de errores de conexiÃ³n
 process.on('SIGINT', async () => {
-    console.log('\n🔄 Cerrando servidor...');
+    console.log('\nCerrando servidor...');
     if (pool) {
         await pool.close();
     }
@@ -1152,3 +1127,8 @@ process.on('SIGINT', async () => {
 
 
 startServer();
+
+
+
+
+
