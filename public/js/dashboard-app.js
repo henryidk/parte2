@@ -4203,6 +4203,12 @@
   }
 
   function showToast(message, type = 'info') {
+    try {
+      // Si existe UIManager, delegar para centralizar y evitar duplicados
+      if (window.dashboardCore && window.dashboardCore.uiManager && typeof window.dashboardCore.uiManager.showToast === 'function') {
+        return window.dashboardCore.uiManager.showToast(message, type);
+      }
+    } catch (_) {}
     const container = document.getElementById('toastContainer');
     if (!container) return alert(message);
     const toast = document.createElement('div');
@@ -4571,13 +4577,21 @@
         });
         const data = await resp.json();
         if (!resp.ok || !data.success) throw new Error(data.message || 'No se pudo registrar');
-        invSetMessage('entryFormMessage', 'success', data.message || 'Entrada registrada.');
+        const productoInfo = data && data.product ? (data.product.codigo + ' - ' + data.product.nombre) : prod;
+        const qtyTxt = isNaN(qty) ? '' : `${qty} ${qty === 1 ? 'unidad' : 'unidades'}`;
+        const msg = qtyTxt ? `Ingreso exitoso: se ingresaron ${qtyTxt}${productoInfo ? ` a ${productoInfo}` : ''}.` : 'Ingreso exitoso.';
+        // Mostrar notificación tipo toast (no alterar botón ni inyectar en el panel)
+        try {
+          const ui = (window.dashboardCore && window.dashboardCore.uiManager);
+          if (ui && typeof ui.showToast === 'function') ui.showToast(msg, 'success');
+          else if (typeof showToast === 'function') showToast(msg, 'success');
+        } catch(_) {}
         // Limpiar formulario para dar feedback visual inmediato
         input.value = '';
         const q = document.getElementById('entryQtyInput'); if (q) q.value = '';
         const r = document.getElementById('entryRefInput'); if (r) r.value = '';
         if (box) { box.style.display = 'none'; box.innerHTML = ''; }
-        try { if (window.showToast) showToast('Entrada registrada', 'success'); } catch(_) {}
+        
       } catch (e) {
         invSetMessage('entryFormMessage', 'error', e.message || 'Error registrando entrada');
       } finally {

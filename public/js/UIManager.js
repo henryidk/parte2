@@ -160,12 +160,17 @@ class UIManager {
 
     // === SISTEMA DE NOTIFICACIONES TOAST ===
     createToastContainer() {
-        if (!this.toastContainer) {
-            this.toastContainer = document.createElement('div');
-            this.toastContainer.className = 'toast-container';
-            this.toastContainer.id = 'toastContainer';
-            document.body.appendChild(this.toastContainer);
+        if (this.toastContainer) return;
+        // Reutilizar contenedor existente si ya está en el DOM
+        const existing = document.getElementById('toastContainer');
+        if (existing) {
+            this.toastContainer = existing;
+            return;
         }
+        this.toastContainer = document.createElement('div');
+        this.toastContainer.className = 'toast-container';
+        this.toastContainer.id = 'toastContainer';
+        document.body.appendChild(this.toastContainer);
     }
 
     showToast(message, type = 'info', duration = 5000) {
