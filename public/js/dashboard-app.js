@@ -389,6 +389,17 @@
   hydrateSections(role);
   registerEvents(role);
 
+  // Actualizar catálogo de productos si llega un aviso de cambios de inventario
+  try {
+    window.addEventListener('inventory:stock-updated', () => {
+      try {
+        if (document.querySelector('#productTable') && typeof refreshProductTable === 'function') {
+          refreshProductTable();
+        }
+      } catch (_) {}
+    });
+  } catch (_) {}
+
   // Gestión de usuarios: bootstrap perezoso cuando la sección esté activa
   let userManagerInstance = null;
   let usersBootstrapped = false;
@@ -4200,6 +4211,13 @@
     if (sectionId === 'usuarios' && role === 'admin') {
       try { ensureUsersBootstrapped(); } catch (_) {}
     }
+
+    // Si se entra a Productos, refrescar la tabla para reflejar cambios recientes
+    if (sectionId === 'productos') {
+      try {
+        setTimeout(() => { try { if (typeof refreshProductTable === 'function') refreshProductTable(); } catch (_) {} }, 50);
+      } catch (_) {}
+    }
   }
 
   function showToast(message, type = 'info') {
@@ -4591,6 +4609,13 @@
         const q = document.getElementById('entryQtyInput'); if (q) q.value = '';
         const r = document.getElementById('entryRefInput'); if (r) r.value = '';
         if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+        // Avisar a otras vistas (Productos) que hubo cambios de stock
+        try {
+          const codeOnly = (prod || '').includes('|') ? (prod || '').split('|')[0].trim() : (prod || '').trim();
+          window.dispatchEvent(new CustomEvent('inventory:stock-updated', { detail: { code: codeOnly, delta: qty } }));
+        } catch (_) {}
+        // Refrescar catálogo de productos si la tabla está presente
+        try { if (typeof refreshProductTable === 'function') await refreshProductTable(); } catch(_) {}
         
       } catch (e) {
         invSetMessage('entryFormMessage', 'error', e.message || 'Error registrando entrada');
