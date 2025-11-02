@@ -1,5 +1,6 @@
 ﻿<!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,6 +10,7 @@
   <link rel="stylesheet" href="/css/modular-components.css">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
+
 <body class="dashboard-body" data-user-role="">
   <header class="dashboard-header">
     <div class="header-content">
@@ -60,7 +62,7 @@
   </aside>
 
   <main class="main-content">
-    
+
 
 
     <section id="reportesSection" class="content-section active">
@@ -163,6 +165,7 @@
             <thead>
               <tr>
                 <th>Fecha</th>
+                <th>Tipo</th>
                 <th>Producto</th>
                 <th>Cantidad</th>
                 <th>Referencia</th>
@@ -171,7 +174,8 @@
             <tbody></tbody>
           </table>
         </div>
-        <div class="table-pagination" id="inventoryMovementsPagination" style="display:flex; align-items:center; gap:12px; justify-content:space-between; margin-top:12px; flex-wrap:wrap;">
+        <div class="table-pagination" id="inventoryMovementsPagination"
+          style="display:flex; align-items:center; gap:12px; justify-content:space-between; margin-top:12px; flex-wrap:wrap;">
           <div class="pagination-left" style="display:flex; align-items:center; gap:10px;">
             <label for="invMovPageSize" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrar</label>
             <select id="invMovPageSize" class="filter-select" style="min-width:80px;">
@@ -182,7 +186,8 @@
             <span style="font-size:0.9rem; color:var(--text-muted, #64748b);">por página</span>
           </div>
           <div class="pagination-right" style="display:flex; align-items:center; gap:10px;">
-            <span id="invMovPageInfo" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrando 0–0 de 0</span>
+            <span id="invMovPageInfo" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrando 0–0 de
+              0</span>
             <div class="pagination-buttons" style="display:flex; gap:8px;">
               <button type="button" class="btn btn-secondary btn-sm" id="invMovPrev">
                 <i class="fas fa-chevron-left"></i> Anterior
@@ -227,9 +232,12 @@
         <div class="panel-card">
           <div class="card-header">
             <h3>Lista de productos activos</h3>
-            <div class="search-wrap" style="display:flex; align-items:center; gap:8px; margin-left:auto; margin-right:8px;">
-              <input id="productSearchInput" type="text" placeholder="Buscar por código o nombre..." style="padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; min-width:260px;">
-              <button class="btn btn-secondary btn-sm" id="productSearchClear" title="Limpiar búsqueda"><i class="fas fa-times"></i></button>
+            <div class="search-wrap"
+              style="display:flex; align-items:center; gap:8px; margin-left:auto; margin-right:8px;">
+              <input id="productSearchInput" type="text" placeholder="Buscar por código o nombre..."
+                style="padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; min-width:260px;">
+              <button class="btn btn-secondary btn-sm" id="productSearchClear" title="Limpiar búsqueda"><i
+                  class="fas fa-times"></i></button>
             </div>
             <button class="btn btn-secondary btn-sm" id="productFiltersBtn">
               <i class="fas fa-filter"></i> Filtros
@@ -238,45 +246,47 @@
               <i class="fas fa-plus"></i> Nuevo producto
             </button>
           </div>
-        <div class="table-responsive">
-          <table class="data-table" id="productTable">
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Nombre</th>
-                <th>Categorías</th>
-                <th>Precio costo</th>
-                <th>Precio venta</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div class="table-pagination" id="productsPagination" style="display:flex; align-items:center; gap:12px; justify-content:space-between; margin-top:12px; flex-wrap:wrap;">
-          <div class="pagination-left" style="display:flex; align-items:center; gap:10px;">
-            <label for="productsPageSize" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrar</label>
-            <select id="productsPageSize" class="filter-select" style="min-width:80px;">
-              <option value="5">5</option>
-              <option value="10" selected>10</option>
-              <option value="20">20</option>
-            </select>
-            <span style="font-size:0.9rem; color:var(--text-muted, #64748b);">por página</span>
+          <div class="table-responsive">
+            <table class="data-table" id="productTable">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Nombre</th>
+                  <th>Categorías</th>
+                  <th>Precio costo</th>
+                  <th>Precio venta</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
           </div>
-          <div class="pagination-right" style="display:flex; align-items:center; gap:10px;">
-            <span id="productsPageInfo" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrando 0–0 de 0</span>
-            <div class="pagination-buttons" style="display:flex; gap:8px;">
-              <button type="button" class="btn btn-secondary btn-sm" id="productsPrev">
-                <i class="fas fa-chevron-left"></i> Anterior
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" id="productsNext">
-                Siguiente <i class="fas fa-chevron-right"></i>
-              </button>
+          <div class="table-pagination" id="productsPagination"
+            style="display:flex; align-items:center; gap:12px; justify-content:space-between; margin-top:12px; flex-wrap:wrap;">
+            <div class="pagination-left" style="display:flex; align-items:center; gap:10px;">
+              <label for="productsPageSize" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrar</label>
+              <select id="productsPageSize" class="filter-select" style="min-width:80px;">
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="20">20</option>
+              </select>
+              <span style="font-size:0.9rem; color:var(--text-muted, #64748b);">por página</span>
+            </div>
+            <div class="pagination-right" style="display:flex; align-items:center; gap:10px;">
+              <span id="productsPageInfo" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrando 0–0 de
+                0</span>
+              <div class="pagination-buttons" style="display:flex; gap:8px;">
+                <button type="button" class="btn btn-secondary btn-sm" id="productsPrev">
+                  <i class="fas fa-chevron-left"></i> Anterior
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="productsNext">
+                  Siguiente <i class="fas fa-chevron-right"></i>
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
       </div>
 
       <!-- Contenido: Asociación producto-categorías -->
@@ -289,8 +299,11 @@
             <div class="form-row">
               <div class="form-group" style="position:relative;">
                 <label for="assocProductInput">Producto (código o nombre)</label>
-                <input type="text" id="assocProductInput" placeholder="Ingresa código o nombre..." autocomplete="off" style="width:100%; padding:12px 16px; border:1px solid #e2e8f0; border-radius:8px;">
-                <div id="assocProductResults" style="position:absolute; left:0; right:0; top:70px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; box-shadow:0 10px 24px rgba(0,0,0,0.08); display:none; z-index:50; overflow:hidden;"></div>
+                <input type="text" id="assocProductInput" placeholder="Ingresa código o nombre..." autocomplete="off"
+                  style="width:100%; padding:12px 16px; border:1px solid #e2e8f0; border-radius:8px;">
+                <div id="assocProductResults"
+                  style="position:absolute; left:0; right:0; top:70px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; box-shadow:0 10px 24px rgba(0,0,0,0.08); display:none; z-index:50; overflow:hidden;">
+                </div>
               </div>
               <div class="form-group">
                 <label>Resumen</label>
@@ -302,13 +315,17 @@
               <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
                 <label style="margin:0;">Categorías</label>
                 <div style="display:flex; align-items:center; gap:8px;">
-                  <input id="assocCategorySearch" type="text" placeholder="Buscar categorías..." style="padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; min-width:240px;">
+                  <input id="assocCategorySearch" type="text" placeholder="Buscar categorías..."
+                    style="padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; min-width:240px;">
                   <button class="btn btn-secondary btn-sm" id="assocCatClear">Limpiar</button>
                   <button class="btn btn-secondary btn-sm" id="assocCatSelectAll">Seleccionar todo</button>
                 </div>
               </div>
-              <div id="assocCategoryGrid" style="margin-top:10px; min-height:48px; border:1px solid #e2e8f0; border-radius:8px; padding:8px;"></div>
-              <div id="assocCategoryPager" style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px;">
+              <div id="assocCategoryGrid"
+                style="margin-top:10px; min-height:48px; border:1px solid #e2e8f0; border-radius:8px; padding:8px;">
+              </div>
+              <div id="assocCategoryPager"
+                style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px;">
                 <span id="assocCatPageInfo" style="font-size:13px; color:#64748b;">Mostrando 0–0 de 0</span>
                 <div style="display:flex; gap:8px;">
                   <button type="button" class="btn btn-secondary btn-sm" id="assocCatPrev">
@@ -323,7 +340,8 @@
 
             <div class="message-container" id="assocMessage"></div>
 
-            <div class="panel-actions" style="display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:12px;">
+            <div class="panel-actions"
+              style="display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:12px;">
               <button type="button" class="btn btn-primary" id="assocSaveBtn">
                 <i class="fas fa-save"></i> Guardar asociación
               </button>
@@ -346,7 +364,8 @@
           </button>
         </div>
         <div class="category-grid" id="categoryGrid"></div>
-        <div class="table-pagination" id="categoriesPagination" style="display:flex; align-items:center; gap:12px; justify-content:space-between; margin-top:12px; flex-wrap:wrap;">
+        <div class="table-pagination" id="categoriesPagination"
+          style="display:flex; align-items:center; gap:12px; justify-content:space-between; margin-top:12px; flex-wrap:wrap;">
           <div class="pagination-left" style="display:flex; align-items:center; gap:10px;">
             <label for="categoriesPageSize" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrar</label>
             <select id="categoriesPageSize" class="filter-select" style="min-width:80px;">
@@ -357,7 +376,8 @@
             <span style="font-size:0.9rem; color:var(--text-muted, #64748b);">por página</span>
           </div>
           <div class="pagination-right" style="display:flex; align-items:center; gap:10px;">
-            <span id="categoriesPageInfo" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrando 0–0 de 0</span>
+            <span id="categoriesPageInfo" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrando 0–0 de
+              0</span>
             <div class="pagination-buttons" style="display:flex; gap:8px;">
               <button type="button" class="btn btn-secondary btn-sm" id="categoriesPrev">
                 <i class="fas fa-chevron-left"></i> Anterior
@@ -388,7 +408,8 @@
         <div class="enhanced-search-box">
           <div class="search-input-group">
             <i class="fas fa-search search-icon"></i>
-            <input type="text" id="adminUserSearchInput" class="search-input" placeholder="Buscar usuario por nombre o email..." autocomplete="off">
+            <input type="text" id="adminUserSearchInput" class="search-input"
+              placeholder="Buscar usuario por nombre o email..." autocomplete="off">
             <button class="search-button" data-action="performUserSearch"><i class="fas fa-search"></i> Buscar</button>
           </div>
         </div>
@@ -450,13 +471,14 @@
         </form>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-secondary" data-action="closeModal" data-modal="categoryModal">Cancelar</button>
+        <button type="button" class="btn-secondary" data-action="closeModal"
+          data-modal="categoryModal">Cancelar</button>
         <button type="submit" class="btn-primary" id="categoryFormSubmit">
           <i class="fas fa-save"></i> Guardar categoría
         </button>
       </div>
+    </div>
   </div>
-</div>
 
   <div class="modal-overlay" id="categoryProductsModal">
     <div class="modal-container">
@@ -495,9 +517,11 @@
           </table>
         </div>
 
-        <div class="table-pagination" id="categoryProductsPagination" style="display:flex; align-items:center; gap:12px; justify-content:space-between; margin-top:12px; flex-wrap:wrap;">
+        <div class="table-pagination" id="categoryProductsPagination"
+          style="display:flex; align-items:center; gap:12px; justify-content:space-between; margin-top:12px; flex-wrap:wrap;">
           <div class="pagination-left" style="display:flex; align-items:center; gap:10px;">
-            <label for="categoryProductsPageSize" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrar</label>
+            <label for="categoryProductsPageSize"
+              style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrar</label>
             <select id="categoryProductsPageSize" class="filter-select" style="min-width:80px;">
               <option value="3" selected>3</option>
               <option value="5">5</option>
@@ -507,7 +531,8 @@
             <span style="font-size:0.9rem; color:var(--text-muted, #64748b);">por página</span>
           </div>
           <div class="pagination-right" style="display:flex; align-items:center; gap:10px;">
-            <span id="categoryProductsPageInfo" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrando 0–0 de 0</span>
+            <span id="categoryProductsPageInfo" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrando
+              0–0 de 0</span>
             <div class="pagination-buttons" style="display:flex; gap:8px;">
               <button type="button" class="btn btn-secondary btn-sm" id="categoryProductsPrev">
                 <i class="fas fa-chevron-left"></i> Anterior
@@ -523,7 +548,8 @@
         <button type="button" class="btn-secondary" id="viewCategoryInProductsBtn">
           <i class="fas fa-up-right-from-square"></i> Ver en Productos
         </button>
-        <button type="button" class="btn-primary" data-action="closeModal" data-modal="categoryProductsModal">Cerrar</button>
+        <button type="button" class="btn-primary" data-action="closeModal"
+          data-modal="categoryProductsModal">Cerrar</button>
       </div>
     </div>
   </div>
@@ -555,7 +581,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-primary" data-action="closeModal" data-modal="categoryDetailModal">Cerrar</button>
+        <button type="button" class="btn-primary" data-action="closeModal"
+          data-modal="categoryDetailModal">Cerrar</button>
       </div>
     </div>
   </div>
@@ -646,13 +673,18 @@
 
             <div id="productEditCategorySection" style="display:none; margin-top:10px;">
               <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-                <input id="productEditCategorySearch" type="text" placeholder="Buscar categorías..." style="flex:1; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px;">
+                <input id="productEditCategorySearch" type="text" placeholder="Buscar categorías..."
+                  style="flex:1; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px;">
                 <button type="button" class="btn btn-secondary btn-sm" id="productEditCatClear">Limpiar</button>
-                <button type="button" class="btn btn-secondary btn-sm" id="productEditCatSelectAll">Seleccionar todo</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="productEditCatSelectAll">Seleccionar
+                  todo</button>
               </div>
-              <div id="productEditCategoryList" style="max-height:220px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px; padding:8px;"></div>
+              <div id="productEditCategoryList"
+                style="max-height:220px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px; padding:8px;">
+              </div>
             </div>
-            <div id="productEditCategoryHint" style="color:#64748b; font-size:13px; margin-top:6px;">Mantener categorías actuales.</div>
+            <div id="productEditCategoryHint" style="color:#64748b; font-size:13px; margin-top:6px;">Mantener categorías
+              actuales.</div>
             <div id="productEditCurrentCats" style="margin-top:8px;"></div>
           </div>
           <div class="form-row">
@@ -669,7 +701,8 @@
         </form>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-secondary" data-action="closeModal" data-modal="productEditModal">Cancelar</button>
+        <button type="button" class="btn-secondary" data-action="closeModal"
+          data-modal="productEditModal">Cancelar</button>
         <button type="submit" class="btn-primary" id="productEditFormSubmit">
           <i class="fas fa-save"></i> Guardar cambios
         </button>
@@ -691,7 +724,8 @@
         <p class="detail-description">Esta acción no se puede deshacer.</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-secondary" data-action="closeModal" data-modal="productDeleteModal">Cancelar</button>
+        <button type="button" class="btn-secondary" data-action="closeModal"
+          data-modal="productDeleteModal">Cancelar</button>
         <button type="button" class="btn-primary btn-danger" id="deleteProductConfirmBtn">
           <i class="fas fa-trash"></i> Eliminar
         </button>
@@ -750,7 +784,9 @@
             <div class="form-group" style="position:relative;">
               <label for="invEntryProdInput">Producto</label>
               <input type="text" id="invEntryProdInput" placeholder="Código o nombre" autocomplete="off">
-              <div id="invEntryProdResults" style="position:absolute; left:0; right:0; top:70px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; box-shadow:0 10px 24px rgba(0,0,0,0.08); display:none; z-index:50;"></div>
+              <div id="invEntryProdResults"
+                style="position:absolute; left:0; right:0; top:70px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; box-shadow:0 10px 24px rgba(0,0,0,0.08); display:none; z-index:50;">
+              </div>
             </div>
             <div class="form-group">
               <label for="invEntryDate">Fecha y hora</label>
@@ -771,15 +807,17 @@
         </form>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-secondary" data-action="closeModal" data-modal="inventoryEntryModal">Cancelar</button>
-        <button type="submit" class="btn-primary" id="invEntryFormSubmit"><i class="fas fa-check"></i> Registrar entrada</button>
+        <button type="button" class="btn-secondary" data-action="closeModal"
+          data-modal="inventoryEntryModal">Cancelar</button>
+        <button type="submit" class="btn-primary" id="invEntryFormSubmit"><i class="fas fa-check"></i> Registrar
+          entrada</button>
       </div>
     </div>
   </div>
 
-  
-        <!-- removed: inventoryExitModal (salida) -->
-        <!--
+
+  <!-- removed: inventoryExitModal (salida) -->
+  <!--
           <i class="fas fa-times"></i>
         </button>
       </div>
@@ -826,10 +864,12 @@
         </button>
       </div>
       <div class="modal-body">
-        <p>¿Seguro que deseas eliminar la categoría <strong id="deleteCategoryName"></strong>? Esta acción no se puede deshacer.</p>
+        <p>¿Seguro que deseas eliminar la categoría <strong id="deleteCategoryName"></strong>? Esta acción no se puede
+          deshacer.</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-secondary" data-action="closeModal" data-modal="categoryDeleteModal">Cancelar</button>
+        <button type="button" class="btn-secondary" data-action="closeModal"
+          data-modal="categoryDeleteModal">Cancelar</button>
         <button type="button" class="btn-primary btn-danger" id="deleteConfirmBtn">
           <i class="fas fa-trash"></i> Eliminar
         </button>
@@ -899,7 +939,8 @@
             <div class="input-wrapper">
               <i class="fas fa-lock"></i>
               <input type="password" id="currentPassword" placeholder="Contraseña actual" required>
-              <button type="button" class="toggle-password" data-toggle="currentPassword" data-icon="currentPasswordIcon">
+              <button type="button" class="toggle-password" data-toggle="currentPassword"
+                data-icon="currentPasswordIcon">
                 <i class="fas fa-eye" id="currentPasswordIcon"></i>
               </button>
             </div>
@@ -925,7 +966,8 @@
             <div class="input-wrapper">
               <i class="fas fa-lock"></i>
               <input type="password" id="confirmPassword" placeholder="Confirma la nueva contraseña" required>
-              <button type="button" class="toggle-password" data-toggle="confirmPassword" data-icon="confirmPasswordIcon">
+              <button type="button" class="toggle-password" data-toggle="confirmPassword"
+                data-icon="confirmPasswordIcon">
                 <i class="fas fa-eye" id="confirmPasswordIcon"></i>
               </button>
             </div>
@@ -944,7 +986,8 @@
         </form>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-secondary" data-action="closeModal" data-modal="changePasswordModal">Cancelar</button>
+        <button type="button" class="btn-secondary" data-action="closeModal"
+          data-modal="changePasswordModal">Cancelar</button>
         <button type="button" class="btn-primary" data-action="changePassword">
           <i class="fas fa-key"></i> Actualizar contraseña
         </button>
@@ -993,8 +1036,10 @@
         </form>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-secondary" data-action="closeModal" data-params='{"modal":"addUserModal"}'>Cancelar</button>
-        <button type="button" class="btn-primary" data-action="addUser" id="addUserBtn"><i class="fas fa-save"></i> Crear Usuario</button>
+        <button type="button" class="btn-secondary" data-action="closeModal"
+          data-params='{"modal":"addUserModal"}'>Cancelar</button>
+        <button type="button" class="btn-primary" data-action="addUser" id="addUserBtn"><i class="fas fa-save"></i>
+          Crear Usuario</button>
       </div>
     </div>
   </div>
@@ -1042,7 +1087,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-primary" data-action="closeModal" data-params='{"modal":"viewUserModal"}'>Cerrar</button>
+        <button type="button" class="btn-primary" data-action="closeModal"
+          data-params='{"modal":"viewUserModal"}'>Cerrar</button>
       </div>
     </div>
   </div>
@@ -1094,7 +1140,8 @@
         </form>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-secondary" data-action="closeModal" data-params='{"modal":"editUserModal"}'>Cancelar</button>
+        <button type="button" class="btn-secondary" data-action="closeModal"
+          data-params='{"modal":"editUserModal"}'>Cancelar</button>
         <button type="button" class="btn-primary" data-action="updateUser" id="updateUserBtn">Guardar Cambios</button>
       </div>
     </div>
@@ -1130,8 +1177,10 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-secondary" data-action="clearUserFiltersModal"><i class="fas fa-eraser"></i> Limpiar</button>
-        <button type="button" class="btn-primary" data-action="applyUserFiltersModal"><i class="fas fa-filter"></i> Aplicar</button>
+        <button type="button" class="btn-secondary" data-action="clearUserFiltersModal"><i class="fas fa-eraser"></i>
+          Limpiar</button>
+        <button type="button" class="btn-primary" data-action="applyUserFiltersModal"><i class="fas fa-filter"></i>
+          Aplicar</button>
       </div>
     </div>
   </div>
@@ -1148,13 +1197,17 @@
         <p>Usuario creado: <strong id="generatedUserName"></strong></p>
         <div class="password-display-modern">
           <input type="text" id="generatedPassword" readonly class="password-input-display">
-          <button type="button" class="copy-btn-modern" data-action="copyGeneratedPassword" title="Copiar contraseña"><i class="fas fa-copy"></i></button>
+          <button type="button" class="copy-btn-modern" data-action="copyGeneratedPassword" title="Copiar contraseña"><i
+              class="fas fa-copy"></i></button>
         </div>
-        <div class="password-copied-feedback" id="passwordCopiedFeedback"><i class="fas fa-check"></i> ¡Contraseña copiada!</div>
+        <div class="password-copied-feedback" id="passwordCopiedFeedback"><i class="fas fa-check"></i> ¡Contraseña
+          copiada!</div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-primary" data-action="copyGeneratedPassword"><i class="fas fa-copy"></i> Copiar</button>
-        <button type="button" class="btn-secondary" data-action="closeModal" data-params='{"modal":"passwordGeneratedModal"}'>Cerrar</button>
+        <button type="button" class="btn-primary" data-action="copyGeneratedPassword"><i class="fas fa-copy"></i>
+          Copiar</button>
+        <button type="button" class="btn-secondary" data-action="closeModal"
+          data-params='{"modal":"passwordGeneratedModal"}'>Cerrar</button>
       </div>
     </div>
   </div>
@@ -1168,14 +1221,16 @@
         <p id="confirmMessage">¿Confirmar acción?</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-secondary" data-action="closeModal" data-params='{"modal":"confirmModal"}'>Cancelar</button>
+        <button type="button" class="btn-secondary" data-action="closeModal"
+          data-params='{"modal":"confirmModal"}'>Cancelar</button>
         <button type="button" class="btn-primary" id="confirmBtn">Confirmar</button>
       </div>
     </div>
   </div>
 
   <!-- Favicon para evitar 404 y ruta correcta del JS -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='8' fill='%23586AE2'/%3E%3Ctext x='8' y='11' text-anchor='middle' font-size='9' fill='white'%3EPR%3C/text%3E%3C/svg%3E" />
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='8' fill='%23586AE2'/%3E%3Ctext x='8' y='11' text-anchor='middle' font-size='9' fill='white'%3EPR%3C/text%3E%3C/svg%3E" />
   <!-- Dependencias para Gestión de Usuarios -->
   <script src="/js/utils/formatters.js"></script>
   <script src="/js/utils/validators.js"></script>
@@ -1185,5 +1240,5 @@
   <script src="/js/UserManager.js"></script>
   <script src="/js/dashboard-app.js"></script>
 </body>
-</html>
 
+</html>

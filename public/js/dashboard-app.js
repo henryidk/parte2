@@ -1718,7 +1718,7 @@
       const critHead = document.getElementById('invCritHead');
       const movHead = document.getElementById('invMovHead');
       if (critHead) critHead.innerHTML = ['Cdigo', 'Producto', 'Disponible', 'Mnimo'].map(h => `<th>${h}</th>`).join('');
-      if (movHead) movHead.innerHTML = ['Fecha', 'Tipo', 'Producto', 'Cantidad'].map(h => `<th>${h}</th>`).join('');
+      if (movHead) movHead.innerHTML = ['Fecha', 'Producto', 'Cantidad'].map(h => `<th>${h}</th>`).join('');
       const critBody = document.getElementById('invCritBody');
       const movBody = document.getElementById('invMovBody');
       if (critBody) critBody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Pendiente de backend.</p></td></tr>';
