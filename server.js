@@ -132,6 +132,52 @@ app.post('/api/inventario/entrada', async (req, res) => {
   }
 });
 
+// Listado de movimientos de inventario (bitácora)
+app.get('/api/inventario/movimientos', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '10', 10)));
+    const offset = (page - 1) * limit;
+
+    const pool = await getPool();
+    const total = (await pool.request().query('SELECT COUNT(*) AS total FROM inv.movimientos_inventario')).recordset[0].total;
+
+    const r = pool.request();
+    r.input('offset', sql.Int, offset);
+    r.input('limit', sql.Int, limit);
+    const rows = (await r.query(`
+      SELECT m.IdMovimiento, m.FechaHora, m.Usuario, m.Codigo, m.Cantidad, m.Referencia,
+             p.Nombre AS NombreProducto
+      FROM inv.movimientos_inventario m
+      LEFT JOIN inv.productos p ON p.IdProducto = m.IdProducto
+      ORDER BY m.FechaHora DESC
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `)).recordset;
+
+    return res.json({
+      success: true,
+      data: rows.map(x => ({
+        id: x.IdMovimiento,
+        fechaHora: x.FechaHora,
+        usuario: x.Usuario,
+        codigo: x.Codigo,
+        producto: x.NombreProducto || x.Codigo,
+        cantidad: Number(x.Cantidad),
+        referencia: x.Referencia || ''
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (err) {
+    console.error('Error en /api/inventario/movimientos:', err);
+    return res.status(500).json({ success: false, message: 'Error obteniendo movimientos de inventario' });
+  }
+});
+
 app.post('/api/login', verifyRecaptcha, async (req, res) => {
   try {
     const { usuario, password } = req.body;

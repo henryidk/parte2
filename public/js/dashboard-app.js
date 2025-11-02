@@ -1982,61 +1982,63 @@
     const ref = document.getElementById('invRef')?.value?.trim() || '';
     if (!prod) return setInvFormMessage('error', 'Selecciona un producto.');
     if (!qty || qty <= 0) return setInvFormMessage('error', 'Ingresa una cantidad vlida.');
-    // Guardar en bitcora en memoria
+    // Refrescar desde backend
     const _invUser = (localStorage.getItem('userName') || localStorage.getItem('currentUser') || 'Usuario');
-    window.inventoryMovements.unshift({ date: date || new Date().toISOString(), user: _invUser, type, product: prod, qty, ref });
-    modalManager.close('inventoryMovementModal');
-    showToast('Movimiento registrado.', 'success');
-    invMovPager.page = 1; // Ver el más reciente
+        modalManager.close('inventoryMovementModal');
+        invMovPager.page = 1; // Ver el más reciente
     renderInventoryMovements();
   }
 
   function renderInventoryMovements() {
-    const tbody = document.querySelector('#inventoryMovementsTable tbody');
-    const infoEl = document.getElementById('invMovPageInfo');
-    const prevBtn = document.getElementById('invMovPrev');
-    const nextBtn = document.getElementById('invMovNext');
-    const pageSizeSelect = document.getElementById('invMovPageSize');
-    if (!tbody) return;
-    const list = window.inventoryMovements || [];
-
-    invMovPager.total = list.length;
-    if (pageSizeSelect) {
-      invMovPager.pageSize = Number(pageSizeSelect.value || invMovPager.pageSize || 10) || 10;
-    }
-
-    if (list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5"><p class="empty-state">Sin movimientos registrados.</p></td></tr>';
-      if (infoEl) infoEl.textContent = 'Mostrando 0–0 de 0';
+  const tbody = document.querySelector('#inventoryMovementsTable tbody');
+  const infoEl = document.getElementById('invMovPageInfo');
+  const prevBtn = document.getElementById('invMovPrev');
+  const nextBtn = document.getElementById('invMovNext');
+  const pageSizeSelect = document.getElementById('invMovPageSize');
+  if (!tbody) return;
+  if (pageSizeSelect) {
+    invMovPager.pageSize = Number(pageSizeSelect.value || invMovPager.pageSize || 10) || 10;
+  }
+  const page = Math.max(1, invMovPager.page || 1);
+  const limit = Math.max(1, invMovPager.pageSize || 10);
+  tbody.innerHTML = '<tr><td colspan="5"><p class="empty-state">Cargando movimientos...</p></td></tr>';
+  fetch(`/api/inventario/movimientos?page=${page}&limit=${limit}`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data || !data.success) throw new Error(data && data.message || 'Error');
+      const rows = Array.isArray(data.data) ? data.data : [];
+      invMovPager.total = Number(data.pagination?.total || rows.length || 0);
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5"><p class="empty-state">Sin movimientos registrados.</p></td></tr>';
+        if (infoEl) infoEl.textContent = 'Mostrando 0-0 de 0';
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = true;
+        return;
+      }
+      tbody.innerHTML = rows.map(m => `
+        <tr>
+          <td>${formatDateTimeSafe(m.fechaHora)}</td>
+          <td>${m.usuario || '-'}</td>
+          <td>${m.producto || m.codigo || '-'}</td>
+          <td>${m.cantidad}</td>
+          <td>${m.referencia || '-'}</td>
+        </tr>
+      `).join('');
+      const start = (page - 1) * limit + 1;
+      const end = Math.min(page * limit, invMovPager.total);
+      if (infoEl) infoEl.textContent = `Mostrando ${start}-${end} de ${invMovPager.total}`;
+      const maxPage = Math.max(1, Math.ceil(invMovPager.total / limit));
+      if (prevBtn) prevBtn.disabled = page <= 1;
+      if (nextBtn) nextBtn.disabled = page >= maxPage;
+    })
+    .catch(() => {
+      tbody.innerHTML = '<tr><td colspan="5"><p class="empty-state">Error cargando movimientos.</p></td></tr>';
+      if (infoEl) infoEl.textContent = '';
       if (prevBtn) prevBtn.disabled = true;
       if (nextBtn) nextBtn.disabled = true;
-      return;
-    }
-
-    const maxPage = Math.max(1, Math.ceil(invMovPager.total / (invMovPager.pageSize || 10)));
-    const safePage = Math.min(Math.max(1, invMovPager.page || 1), maxPage);
-    if (safePage !== invMovPager.page) invMovPager.page = safePage;
-    const start = (safePage - 1) * (invMovPager.pageSize || 10);
-    const end = Math.min(start + (invMovPager.pageSize || 10), invMovPager.total);
-    const slice = list.slice(start, end);
-
-    const _currentInvUser = (localStorage.getItem('userName') || localStorage.getItem('currentUser') || 'Usuario');
-    tbody.innerHTML = slice.map(m => `
-      <tr>
-        <td>${formatDateTimeSafe(m.date)}</td>
-        <td>${(m.user || _currentInvUser)}</td>
-        <td>${m.product}</td>
-        <td>${m.qty}</td>
-        <td>${m.ref || '-'}</td>
-      </tr>
-    `).join('');
-
-    if (infoEl) infoEl.textContent = `Mostrando ${slice.length} de ${invMovPager.total}`;
-    if (prevBtn) prevBtn.disabled = safePage <= 1;
-    if (nextBtn) nextBtn.disabled = safePage >= maxPage;
-  }
-
-  function initInventoryMovementsPagination() {
+    });
+}
+function initInventoryMovementsPagination() {
     const pageSizeSelect = document.getElementById('invMovPageSize');
     const prevBtn = document.getElementById('invMovPrev');
     const nextBtn = document.getElementById('invMovNext');
@@ -4716,6 +4718,9 @@ window.resetReportBaseLayout = function () {
     ].join('');
   } catch (e) { }
 };
+
+
+
 
 
 
