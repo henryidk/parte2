@@ -40,6 +40,98 @@ try {
   console.error('No se pudo montar productosRouter:', e && e.message ? e.message : e);
 }
 
+// === INVENTARIO ===
+// Sugerencias de productos para autocompletar por código o nombre
+app.get('/api/productos/suggest', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json({ success: true, items: [] });
+    const pool = await getPool();
+    const r = pool.request();
+    r.input('q', sql.VarChar(160), `%${q}%`);
+    const rows = (await r.query(`
+      SELECT TOP 10 IdProducto, Codigo, Nombre, Cantidad
+      FROM inv.productos
+      WHERE Codigo LIKE @q OR Nombre LIKE @q
+      ORDER BY CASE WHEN Codigo LIKE @q THEN 0 ELSE 1 END, Nombre
+    `)).recordset;
+    return res.json({ success: true, items: rows.map(x => ({ id: x.IdProducto, code: x.Codigo, name: x.Nombre, stock: Number(x.Cantidad) })) });
+  } catch (err) {
+    console.error('Error en /api/productos/suggest:', err);
+    return res.status(500).json({ success: false, message: 'Error obteniendo sugerencias' });
+  }
+});
+
+// Registrar entrada de inventario (suma stock y registra movimiento)
+app.post('/api/inventario/entrada', async (req, res) => {
+  try {
+    const { producto, cantidad, fechaHora, referencia, usuario } = req.body || {};
+
+    const qty = Number(cantidad);
+    if (!producto || !qty || qty <= 0) {
+      return res.status(400).json({ success: false, message: 'Producto y cantidad (>0) son requeridos' });
+    }
+
+    // Resolver código del producto
+    let raw = String(producto || '').trim();
+    let code = raw.includes('|') ? raw.split('|')[0].trim() : raw;
+
+    const pool = await getPool();
+    // Si el código no es exacto, intentar resolverlo por coincidencia
+    if (!code || code.length < 2) {
+      const find = await pool.request()
+        .input('term', sql.VarChar(150), raw)
+        .input('like', sql.VarChar(160), `%${raw}%`)
+        .query(`
+          SELECT TOP 1 Codigo FROM inv.productos
+          WHERE Codigo = @term OR Nombre = @term OR Codigo LIKE @like OR Nombre LIKE @like
+          ORDER BY CASE WHEN Codigo=@term THEN 0 WHEN Nombre=@term THEN 1 WHEN Codigo LIKE @like THEN 2 ELSE 3 END
+        `);
+      if (find.recordset.length) code = find.recordset[0].Codigo;
+    } else {
+      // Verificar existencia del código; si no existe, intentar por nombre
+      const chk = await pool.request().input('code', sql.VarChar(50), code)
+        .query('SELECT 1 FROM inv.productos WHERE Codigo=@code');
+      if (chk.recordset.length === 0) {
+        const find2 = await pool.request()
+          .input('term', sql.VarChar(150), raw)
+          .input('like', sql.VarChar(160), `%${raw}%`)
+          .query(`SELECT TOP 1 Codigo FROM inv.productos WHERE Nombre=@term OR Nombre LIKE @like ORDER BY Nombre`);
+        if (find2.recordset.length) code = find2.recordset[0].Codigo;
+      }
+    }
+
+    if (!code) return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+
+    const when = fechaHora ? new Date(fechaHora) : new Date();
+    if (isNaN(when.getTime())) return res.status(400).json({ success: false, message: 'Fecha/hora inválida' });
+
+    const r = pool.request();
+    r.input('Codigo', sql.VarChar(50), code);
+    r.input('Cantidad', sql.Int, qty);
+    r.input('FechaHora', sql.DateTime2, when);
+    r.input('Usuario', sql.VarChar(50), (usuario || 'sistema'));
+    r.input('Referencia', sql.NVarChar(250), referencia || null);
+    r.output('Mensaje', sql.NVarChar(200));
+    const result = await r.execute('inv.sp_RegistrarEntradaInventario');
+
+    if (result.returnValue !== 0) {
+      return res.status(400).json({ success: false, message: result.output.Mensaje || 'No se pudo registrar la entrada' });
+    }
+
+    // Obtener producto actualizado
+    const prod = (await pool.request().input('Codigo', sql.VarChar(50), code)
+      .query('SELECT TOP 1 IdProducto, Codigo, Nombre, Cantidad FROM inv.productos WHERE Codigo=@Codigo')).recordset[0];
+
+    return res.json({ success: true, message: result.output.Mensaje || 'Entrada registrada', product: {
+      id: prod.IdProducto, codigo: prod.Codigo, nombre: prod.Nombre, cantidad: Number(prod.Cantidad)
+    }});
+  } catch (err) {
+    console.error('Error en /api/inventario/entrada:', err);
+    return res.status(500).json({ success: false, message: 'Error registrando entrada' });
+  }
+});
+
 app.post('/api/login', verifyRecaptcha, async (req, res) => {
   try {
     const { usuario, password } = req.body;

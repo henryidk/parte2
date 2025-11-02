@@ -1972,7 +1972,8 @@
     if (!prod) return setInvFormMessage('error', 'Selecciona un producto.');
     if (!qty || qty <= 0) return setInvFormMessage('error', 'Ingresa una cantidad vlida.');
     // Guardar en bitcora en memoria
-    window.inventoryMovements.unshift({ date: date || new Date().toISOString(), type, product: prod, qty, ref });
+    const _invUser = (localStorage.getItem('userName') || localStorage.getItem('currentUser') || 'Usuario');
+    window.inventoryMovements.unshift({ date: date || new Date().toISOString(), user: _invUser, type, product: prod, qty, ref });
     modalManager.close('inventoryMovementModal');
     showToast('Movimiento registrado.', 'success');
     invMovPager.page = 1; // Ver el más reciente
@@ -2008,10 +2009,11 @@
     const end = Math.min(start + (invMovPager.pageSize || 10), invMovPager.total);
     const slice = list.slice(start, end);
 
+    const _currentInvUser = (localStorage.getItem('userName') || localStorage.getItem('currentUser') || 'Usuario');
     tbody.innerHTML = slice.map(m => `
       <tr>
         <td>${formatDateTimeSafe(m.date)}</td>
-        <td><span class="tag">${m.type}</span></td>
+        <td>${(m.user || _currentInvUser)}</td>
         <td>${m.product}</td>
         <td>${m.qty}</td>
         <td>${m.ref || '-'}</td>
@@ -4477,7 +4479,7 @@
       '    <div class="card-header"><h3>Bitacora de inventario</h3></div>',
       '    <div class="table-responsive">',
       '      <table class="data-table" id="inventoryMovementsTable">',
-      '        <thead><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th>Cantidad</th><th>Referencia</th></tr></thead>',
+      '        <thead><tr><th>Fecha</th><th>Usuario</th><th>Producto</th><th>Cantidad</th><th>Referencia</th></tr></thead>',
       '        <tbody></tbody>',
       '      </table>',
       '    </div>',
@@ -4523,12 +4525,23 @@
       dateEl.value = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
     }
 
-    const products = (DASHBOARD_DATA[role]?.productos?.list || DASHBOARD_DATA.admin?.productos?.list || []).map(p => ({ code: p.code, name: p.name }));
+    const products = [];
     const input = document.getElementById('entryProductInput');
     const box = document.getElementById('entryProductResults');
     invCreateAutocomplete(input, box, products, (prod) => {
       input.value = prod.code + ' | ' + prod.name;
       box.style.display = 'none';
+    }, {
+      minChars: 2,
+      debounceMs: 120,
+      fetcher: async (term, ctx) => {
+        try {
+          const r = await fetch(`/api/productos/suggest?q=${encodeURIComponent(term || '')}`, { signal: ctx?.signal });
+          const data = await r.json();
+          return (data.items || []).map(x => ({ code: x.code, name: x.name }));
+        } catch (_) { return []; }
+      },
+      cache: true
     });
 
     document.getElementById('entryClearBtn')?.addEventListener('click', () => {
@@ -4538,7 +4551,7 @@
       invClearMessage('entryFormMessage');
     });
 
-    document.getElementById('entrySubmitBtn')?.addEventListener('click', () => {
+    document.getElementById('entrySubmitBtn')?.addEventListener('click', async (ev) => {
       const prod = (input?.value || '').trim();
       const qty = parseInt(document.getElementById('entryQtyInput')?.value || '0', 10);
       // Fecha y hora no editable: siempre usar fecha/hora actuales del sistema
@@ -4546,9 +4559,30 @@
       const ref = document.getElementById('entryRefInput')?.value || '';
       if (!prod) return invSetMessage('entryFormMessage', 'error', 'Selecciona un producto.');
       if (!qty || qty <= 0) return invSetMessage('entryFormMessage', 'error', 'Ingresa una cantidad valida.');
-      window.inventoryMovements.unshift({ date, type: 'Entrada', product: prod, qty, ref });
-      invSetMessage('entryFormMessage', 'success', 'Entrada registrada.');
-      renderInventoryMovements();
+      const btn = document.getElementById('entrySubmitBtn');
+      const prevHtml = btn ? btn.innerHTML : '';
+      if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Guardando...'; }
+      invSetMessage('entryFormMessage', 'info', 'Guardando entrada...');
+      try {
+        const currentUser = localStorage.getItem('currentUser') || localStorage.getItem('userName') || 'usuario';
+        const resp = await fetch('/api/inventario/entrada', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ producto: prod, cantidad: qty, fechaHora: date, referencia: ref, usuario: currentUser })
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) throw new Error(data.message || 'No se pudo registrar');
+        invSetMessage('entryFormMessage', 'success', data.message || 'Entrada registrada.');
+        // Limpiar formulario para dar feedback visual inmediato
+        input.value = '';
+        const q = document.getElementById('entryQtyInput'); if (q) q.value = '';
+        const r = document.getElementById('entryRefInput'); if (r) r.value = '';
+        if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+        try { if (window.showToast) showToast('Entrada registrada', 'success'); } catch(_) {}
+      } catch (e) {
+        invSetMessage('entryFormMessage', 'error', e.message || 'Error registrando entrada');
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = prevHtml; }
+      }
     });
   }
 
@@ -4556,18 +4590,42 @@
 
   function invCreateAutocomplete(input, resultsBox, sourceList, onSelect, options = {}) {
     if (!input || !resultsBox) return;
-    const render = (term) => {
-      const t = (term || '').toLowerCase().trim();
+    let last = [];
+    let timer;
+    let controller;
+    const render = async (term) => {
+      const minChars = Number(options.minChars || 0) || 0;
+      const tRaw = String(term || '').trim();
+      if (minChars > 0 && tRaw.length < minChars) { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; return; }
       let matches = sourceList || [];
-      if (t) matches = matches.filter(p => (p.code || '').toLowerCase().includes(t) || (p.name || '').toLowerCase().includes(t));
-      matches = matches.slice(0, 8);
-      if (!matches.length) { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; return; }
-      resultsBox.innerHTML = matches.map(p => `<div class=\"result-item\" data-code=\"${p.code}\" style=\"padding:10px 12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;\"><span>${p.code} | ${p.name}</span><i class=\"fas fa-arrow-turn-down\"></i></div>`).join('');
+      const t = tRaw;
+      if (options.fetcher) {
+        try {
+          if (controller) { try { controller.abort(); } catch(_){} }
+          controller = new AbortController();
+          matches = await options.fetcher(t, { signal: controller.signal });
+        } catch (e) {
+          if (e?.name === 'AbortError') return; // ignorar abortados
+          matches = [];
+        }
+      } else {
+        const tl = t.toLowerCase();
+        if (tl) matches = (sourceList || []).filter(p => (p.code || '').toLowerCase().includes(tl) || (p.name || '').toLowerCase().includes(tl));
+        matches = matches.slice(0, 8);
+      }
+      last = matches || [];
+      if (!last.length) { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; return; }
+      resultsBox.innerHTML = last.map(p => `<div class=\"result-item\" data-code=\"${p.code}\" style=\"padding:10px 12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;\"><span>${p.code} | ${p.name}</span><i class=\"fas fa-arrow-turn-down\"></i></div>`).join('');
       resultsBox.style.display = 'block';
     };
-    input.addEventListener('input', () => render(input.value));
+    const schedule = () => {
+      clearTimeout(timer);
+      const d = Number(options.debounceMs || 0) || 0;
+      if (d > 0) { timer = setTimeout(() => render(input.value), d); } else { render(input.value); }
+    };
+    input.addEventListener('input', schedule);
     if (options.showOnFocus !== false) {
-      input.addEventListener('focus', () => render(input.value));
+      input.addEventListener('focus', schedule);
     }
     document.addEventListener('click', (e) => {
       if (resultsBox && !resultsBox.contains(e.target) && e.target !== input) resultsBox.style.display = 'none';
@@ -4576,7 +4634,8 @@
       const item = e.target.closest('.result-item');
       if (!item) return;
       const code = item.getAttribute('data-code');
-      const prod = (sourceList || []).find(p => p.code === code);
+      let prod = (sourceList || []).find(p => p.code === code);
+      if (!prod) prod = (last || []).find(p => p.code === code);
       if (!prod) return;
       onSelect(prod);
     });

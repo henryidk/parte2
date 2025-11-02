@@ -317,6 +317,99 @@ LEFT JOIN inv.categorias c         ON c.IdCategoria = pc.IdCategoria
 GROUP BY p.IdProducto, p.Codigo, p.Nombre, p.PrecioCosto, p.PrecioVenta, p.Cantidad, p.Estado;
 GO
 
+------------------------------------------------------------
+-- A.7) Movimientos de inventario: entradas de stock
+--     Tabla de auditoría de entradas y SP para registrar
+------------------------------------------------------------
+IF OBJECT_ID('inv.movimientos_inventario') IS NULL
+BEGIN
+    CREATE TABLE inv.movimientos_inventario
+    (
+        IdMovimiento   BIGINT IDENTITY(1,1) PRIMARY KEY,
+        IdProducto     INT           NOT NULL,
+        Codigo         VARCHAR(50)   NOT NULL,
+        Cantidad       INT           NOT NULL CHECK (Cantidad > 0),
+        FechaHora      DATETIME2(0)  NOT NULL CONSTRAINT DF_inv_mov_FH DEFAULT(SYSDATETIME()),
+        Usuario        VARCHAR(50)   NULL,
+        Referencia     NVARCHAR(250) NULL,
+        CONSTRAINT FK_inv_mov_producto FOREIGN KEY(IdProducto)
+            REFERENCES inv.productos(IdProducto)
+            ON DELETE CASCADE
+    );
+
+    CREATE INDEX IX_inv_mov_Prod_Fecha ON inv.movimientos_inventario (IdProducto, FechaHora DESC);
+    CREATE INDEX IX_inv_mov_Codigo      ON inv.movimientos_inventario (Codigo);
+END
+GO
+
+-- Procedimiento: Registrar entrada de inventario (suma a Cantidad)
+IF OBJECT_ID('inv.sp_RegistrarEntradaInventario') IS NOT NULL
+    DROP PROCEDURE inv.sp_RegistrarEntradaInventario;
+GO
+CREATE PROCEDURE inv.sp_RegistrarEntradaInventario
+    @Codigo     VARCHAR(50),
+    @Cantidad   INT,
+    @FechaHora  DATETIME2(0) = NULL,
+    @Usuario    VARCHAR(50)  = NULL,
+    @Referencia NVARCHAR(250) = NULL,
+    @Mensaje    NVARCHAR(200) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON; SET XACT_ABORT ON;
+
+    IF (@Codigo IS NULL OR LTRIM(RTRIM(@Codigo)) = '') BEGIN
+        SET @Mensaje = N'Código de producto requerido'; RETURN -10;
+    END
+    IF (@Cantidad IS NULL OR @Cantidad <= 0) BEGIN
+        SET @Mensaje = N'Cantidad debe ser > 0'; RETURN -11;
+    END
+
+    DECLARE @IdProducto INT;
+    SELECT TOP 1 @IdProducto = IdProducto
+    FROM inv.productos WHERE Codigo = @Codigo;
+
+    IF @IdProducto IS NULL BEGIN
+        SET @Mensaje = N'Producto no encontrado'; RETURN -12;
+    END
+
+    IF @FechaHora IS NULL SET @FechaHora = SYSDATETIME();
+
+    BEGIN TRAN;
+        UPDATE inv.productos
+        SET Cantidad = Cantidad + @Cantidad
+        WHERE IdProducto = @IdProducto;
+
+        INSERT INTO inv.movimientos_inventario
+            (IdProducto, Codigo, Cantidad, FechaHora, Usuario, Referencia)
+        VALUES
+            (@IdProducto, @Codigo, @Cantidad, @FechaHora, @Usuario, @Referencia);
+
+        -- Bitácora de transacciones (opcional; no bloqueante)
+        BEGIN TRY
+            INSERT INTO seg.tbBitacoraTransacciones(Usuario, IdUsuario, Operacion, Entidad, ClaveEntidad, Detalle)
+            VALUES(
+                @Usuario,
+                (SELECT TOP 1 IdUsuario FROM seg.tbUsuario WHERE Usuario = @Usuario),
+                'INV_ENTRADA',
+                'inv.productos',
+                @Codigo,
+                CONCAT('Entrada de stock +', @Cantidad, ' - Ref: ', COALESCE(@Referencia,''))
+            );
+        END TRY BEGIN CATCH END CATCH;
+    COMMIT;
+
+    SET @Mensaje = N'Entrada registrada';
+    RETURN 0;
+END
+GO
+
+-- Permisos mínimos
+IF EXISTS (SELECT 1 FROM sys.database_principals WHERE name='rol_admin_app')
+    GRANT EXECUTE ON OBJECT::inv.sp_RegistrarEntradaInventario TO rol_admin_app;
+IF EXISTS (SELECT 1 FROM sys.database_principals WHERE name='rol_secretaria_app')
+    GRANT EXECUTE ON OBJECT::inv.sp_RegistrarEntradaInventario TO rol_secretaria_app;
+GO
+
 /* =========================================================
    SECCIÓN B) SEGURIDAD / LOGIN
    ========================================================= */

@@ -1,6 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const controller = require('../controllers/productos.controller');
+const { getPool, sql } = require('../db/pool');
 
 const router = express.Router();
 
@@ -26,6 +27,36 @@ function validateCreate(req, res, next) {
 router.post('/', createLimiter, validateCreate, controller.createProducto);
 router.get('/', controller.listProductos);
 // Rutas específicas deben ir antes de rutas con parámetros
+// Sugerencias (debe ir antes de '/:codigo')
+router.get('/suggest', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json({ success: true, items: [] });
+    const pool = await getPool();
+    const r = pool.request();
+    r.input('q', sql.VarChar(160), q);
+    r.input('qp', sql.VarChar(160), `${q}%`);
+    r.input('qc', sql.VarChar(160), `%${q}%`);
+    const rows = (await r.query(`
+      SELECT TOP 8 IdProducto, Codigo, Nombre, Cantidad,
+        CASE
+          WHEN Codigo = @q OR Nombre = @q THEN 0
+          WHEN Codigo LIKE @qp THEN 1
+          WHEN Nombre LIKE @qp THEN 2
+          WHEN Codigo LIKE @qc THEN 3
+          ELSE 4
+        END AS score
+      FROM inv.productos
+      WHERE (Codigo = @q OR Nombre = @q OR Codigo LIKE @qp OR Nombre LIKE @qp OR Codigo LIKE @qc OR Nombre LIKE @qc)
+      ORDER BY score, Nombre
+    `)).recordset;
+    return res.json({ success: true, items: rows.map(x => ({ id: x.IdProducto, code: x.Codigo, name: x.Nombre, stock: Number(x.Cantidad) })) });
+  } catch (err) {
+    console.error('productos/suggest error:', err);
+    return res.status(500).json({ success: false, message: 'Error obteniendo sugerencias' });
+  }
+});
+
 router.get('/catalogo/categorias', controller.getCategorias);
 router.get('/catalogo/categorias/detalle', controller.getCategoriasDetalle);
 router.post('/catalogo/categorias', controller.createCategoria);

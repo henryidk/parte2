@@ -88,7 +88,7 @@
         </div>
       </div>
 
-      <div class="panel-card">
+      <!-- Removed: static inventory bitacora panel
         <div class="card-header">
           <h3>Detalle consolidado</h3>
           <span class="badge badge-success" id="reportBadge">Listo para descargar</span>
@@ -101,7 +101,7 @@
             <tbody id="reportTableBody"></tbody>
           </table>
         </div>
-      </div>
+      -->
 
       <div class="insights-grid" id="reportCharts"></div>
     </section>
@@ -161,11 +161,11 @@
           <h3>Bitácora de inventario</h3>
         </div>
         <div class="table-responsive">
-          <table class="data-table" id="inventoryMovementsTable">
+          <table class="data-table" id="inventoryMovementsTable" hidden>
             <thead>
               <tr>
                 <th>Fecha</th>
-                <th>Tipo</th>
+                <th>Usuario</th>
                 <th>Producto</th>
                 <th>Cantidad</th>
                 <th>Referencia</th>
@@ -175,7 +175,7 @@
           </table>
         </div>
         <div class="table-pagination" id="inventoryMovementsPagination"
-          style="display:flex; align-items:center; gap:12px; justify-content:space-between; margin-top:12px; flex-wrap:wrap;">
+          style="display:none;">
           <div class="pagination-left" style="display:flex; align-items:center; gap:10px;">
             <label for="invMovPageSize" style="font-size:0.9rem; color:var(--text-muted, #64748b);">Mostrar</label>
             <select id="invMovPageSize" class="filter-select" style="min-width:80px;">
