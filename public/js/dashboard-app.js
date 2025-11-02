@@ -2292,6 +2292,7 @@
     setupProductTabs();
     buildAssociationUI(data);
     initProductsFilters();
+    initProductSearch();
     initProductsPagination();
     refreshProductTable();
   }
@@ -3012,6 +3013,26 @@
     `).join('');
   }
 
+  // Búsqueda rápida por código o nombre (debounced)
+  let productSearchTimer;
+  function initProductSearch() {
+    const input = document.getElementById('productSearchInput');
+    const btnClear = document.getElementById('productSearchClear');
+    if (!input) return;
+    const trigger = () => { productsPager.page = 1; refreshProductTable(); };
+    input.addEventListener('input', () => {
+      if (productSearchTimer) clearTimeout(productSearchTimer);
+      productSearchTimer = setTimeout(trigger, 300);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); if (productSearchTimer) clearTimeout(productSearchTimer); trigger(); }
+    });
+    btnClear?.addEventListener('click', () => {
+      input.value = '';
+      trigger();
+    });
+  }
+
   function getStatusChipClass(status) {
     const s = (status || '').toString().toLowerCase();
     if (s.includes('sin existencias') || s.includes('agotado')) return 'danger';
@@ -3058,6 +3079,8 @@
       estado,
       categoria
     });
+    const searchTerm = (document.getElementById('productSearchInput')?.value || '').toString().trim();
+    if (searchTerm) params.set('search', searchTerm);
     try {
       const resp = await fetch(`/api/productos?${params}`);
       const data = await resp.json();
