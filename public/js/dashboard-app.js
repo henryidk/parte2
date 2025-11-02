@@ -1032,7 +1032,8 @@
           categories,
           cost: formatMoney(Number(r.PrecioCosto ?? r.precioCosto ?? 0)),
           price: formatMoney(Number(r.PrecioVenta ?? r.precioVenta ?? 0)),
-          status: r.Estado || r.estado || 'En stock'
+          status: r.Estado || r.estado || 'En stock',
+          qty: (() => { const q = Number(r.Cantidad ?? r.cantidad ?? 0); return (Number.isFinite(q) && q > 0) ? q : undefined; })()
         };
       });
 
@@ -1050,7 +1051,7 @@
             <td>${(p.categories || []).map(cat => `<span class="tag">${cat}</span>`).join(' ')}</td>
             <td>${p.cost}</td>
             <td>${p.price}</td>
-            <td><span class="status-chip ${p.status === 'Activo' ? 'success' : 'warning'}">${p.status}</span></td>
+            <td><span class="status-chip ${getStatusChipClass(p.status)}">${p.status}${Number.isFinite(p.qty) ? ` (${p.qty})` : ''}</span></td>
           </tr>
         `).join('');
       }
@@ -3001,7 +3002,7 @@
         <td>${product.cost}</td>
         <td>${product.price}</td>
         <td>
-          <span class="status-chip ${getStatusChipClass(product.status)}">${product.status}</span>
+          <span class="status-chip ${getStatusChipClass(product.status)}">${product.status}${Number.isFinite(product.qty) ? ` (${product.qty})` : ''}</span>
         </td>
         <td>
           <button class="btn btn-secondary btn-sm" data-product-action="edit" data-code="${product.code}" onclick="window.__openEditProduct('${product.code}')"><i class="fas fa-pen"></i></button>
@@ -3074,7 +3075,8 @@
           categories,
           cost: formatMoney(Number(r.PrecioCosto ?? r.precioCosto ?? 0)),
           price: formatMoney(Number(r.PrecioVenta ?? r.precioVenta ?? 0)),
-          status: r.Estado || r.estado || 'En stock'
+          status: r.Estado || r.estado || 'En stock',
+          qty: (() => { const q = Number(r.Cantidad ?? r.cantidad ?? 0); return (Number.isFinite(q) && q > 0) ? q : undefined; })()
         };
       });
       buildProductTable(tbody, rows);
