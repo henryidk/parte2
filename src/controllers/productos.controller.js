@@ -1,4 +1,4 @@
-﻿const service = require('../services/productos.service');
+const service = require('../services/productos.service');
 
 async function createProducto(req, res) {
   try {
@@ -41,7 +41,7 @@ async function updateProducto(req, res) {
   try {
     const { codigo } = req.params;
     if (!codigo) return res.status(400).json({ success: false, message: 'CÃ³digo requerido' });
-    const { nombre, precioCosto, precioVenta, cantidad, categorias } = req.body || {};
+    const { nombre, precioCosto, precioVenta, descuento, cantidad, categorias } = req.body || {};
 
     // Validaciones bÃ¡sicas
     const updates = {};
@@ -57,6 +57,11 @@ async function updateProducto(req, res) {
     if (cantidad != null) {
       const v = Number(cantidad); if (!Number.isInteger(v) || v < 0) return res.status(400).json({ success:false, message:'cantidad invÃ¡lida' });
       updates.cantidad = v;
+    }
+    if (descuento != null) {
+      const v = Number(descuento);
+      if (!Number.isFinite(v) || v < 0 || v > 100) return res.status(400).json({ success:false, message:'descuento debe estar entre 0 y 100' });
+      updates.descuento = v;
     }
     let cats = [];
     if (Array.isArray(categorias)) cats = categorias.filter(x => typeof x === 'string' && x.trim()).map(s => s.trim());
@@ -158,3 +163,4 @@ async function deleteCategoria(req, res) {
     return res.status(500).json({ success: false, message: 'Error interno del servidor' });
   }
 }
+

@@ -138,7 +138,7 @@ async function getProductoByCodigo(codigo) {
   const view = 'inv.v_productos';
   const r = await p.request()
     .input('Codigo', sql.VarChar(50), String(codigo || '').trim())
-    .query(`SELECT TOP 1 IdProducto, Codigo, Nombre, Categorias, PrecioCosto, PrecioVenta, Cantidad, Estado
+    .query(`SELECT TOP 1 IdProducto, Codigo, Nombre, Categorias, PrecioCosto, PrecioVenta, Descuento, Cantidad, Estado
             FROM ${view} WHERE Codigo = @Codigo`);
   if (r.recordset.length === 0) return null;
   const row = r.recordset[0];
@@ -153,6 +153,7 @@ async function getProductoByCodigo(codigo) {
     categorias: cats,
     precioCosto: Number(row.PrecioCosto),
     precioVenta: Number(row.PrecioVenta),
+    descuento: (row.Descuento != null ? Number(row.Descuento) : 0),
     cantidad: Number(row.Cantidad),
     estado: row.Estado
   };
@@ -224,7 +225,7 @@ async function getCategoriasDetalle() {
   }));
 }
 
-async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta, cantidad, categorias }) {
+async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta, descuento, cantidad, categorias }) {
   const p = await getDbPool();
   const code = String(codigo || '').trim();
   // Obtener IdProducto
@@ -242,6 +243,7 @@ async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta
   if (typeof nombre === 'string') { setParts.push('Nombre = @Nombre'); reqUpd.input('Nombre', sql.VarChar(150), nombre); }
   if (precioCosto != null) { setParts.push('PrecioCosto = @PrecioCosto'); reqUpd.input('PrecioCosto', sql.Decimal(18,2), Number(precioCosto)); }
   if (precioVenta != null) { setParts.push('PrecioVenta = @PrecioVenta'); reqUpd.input('PrecioVenta', sql.Decimal(18,2), Number(precioVenta)); }
+  if (descuento != null) { setParts.push('Descuento = @Descuento'); reqUpd.input('Descuento', sql.Decimal(5,2), Number(descuento)); }
   if (cantidad != null) { setParts.push('Cantidad = @Cantidad'); reqUpd.input('Cantidad', sql.Int, Number(cantidad)); }
 
   // Si vienen categorÃ­as, sincronizar relaciÃ³n M:N

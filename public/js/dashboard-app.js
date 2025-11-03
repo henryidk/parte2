@@ -3265,10 +3265,12 @@ function initInventoryMovementsPagination() {
     const nameEl = document.getElementById('productEditName');
     const costEl = document.getElementById('productEditCost');
     const priceEl = document.getElementById('productEditPrice');
+    const discEl = document.getElementById('productEditDiscount');
     if (codeEl) codeEl.value = code || '';
     if (nameEl) nameEl.value = '';
     if (costEl) costEl.value = '';
     if (priceEl) priceEl.value = '';
+    if (discEl) discEl.value = '';
 
     // Reset y abrir modal (el grid se renderiza tras cargar datos o al activar el toggle)
     const currentWrap = document.getElementById('productEditCurrentCats');
@@ -3287,6 +3289,7 @@ function initInventoryMovementsPagination() {
         if (nameEl) nameEl.value = p.nombre || '';
         if (costEl) costEl.value = Number(p.precioCosto ?? 0);
         if (priceEl) priceEl.value = Number(p.precioVenta ?? 0);
+        if (discEl) discEl.value = (p.descuento != null ? Number(p.descuento) : 0);
         const current = Array.isArray(p.categorias) ? p.categorias : [];
         const selSet = new Set(current.map(c => (c || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()));
         // Guardar estado y mapping de display
@@ -3431,6 +3434,7 @@ function initInventoryMovementsPagination() {
     const name = document.getElementById('productEditName')?.value?.trim() || '';
     const cost = parseFloat(document.getElementById('productEditCost')?.value || '0');
     const price = parseFloat(document.getElementById('productEditPrice')?.value || '0');
+    const disc = parseFloat(document.getElementById('productEditDiscount')?.value || '0');
     const keys = Array.from(window.__editProductState?.categories || new Set());
     const cats = keys.map(k => (window.__editProductState?.display?.get(k)) || (window.__editProductState?.canon?.get(k)) || (k.charAt(0).toUpperCase() + k.slice(1)));
     if (!code || !name) { setEditProductFormMessage('error','Faltan datos obligatorios.'); return; }
@@ -3438,7 +3442,7 @@ function initInventoryMovementsPagination() {
     fetch(`/api/productos/${encodeURIComponent(code)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre: name, precioCosto: cost, precioVenta: price, categorias: cats })
+      body: JSON.stringify({ nombre: name, precioCosto: cost, precioVenta: price, descuento: isNaN(disc) ? 0 : disc, categorias: cats })
     })
     .then(r => r.json())
     .then(data => {
@@ -4516,7 +4520,10 @@ function initInventoryMovementsPagination() {
       '</div>',
       '<div id="invLogContent" class="bitacora-content">',
       '  <div class="panel-card">',
-      '    <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; gap:12px;"><h3>Bitacora de inventario</h3><button class="btn btn-secondary btn-sm" id="inventoryFiltersBtn" type="button"><i class="fas fa-filter"></i> Filtros</button></div>',
+      '    <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">'
+      + '      <h3>Bitacora de inventario</h3>'
+      + '      <button class="btn btn-secondary btn-sm" id="inventoryFiltersBtn" type="button"><i class="fas fa-filter"></i> Filtros</button>'
+      + '    </div>',
       '    <div class="table-responsive">',
       '      <table class="data-table" id="inventoryMovementsTable">',
       '        <thead><tr><th>Fecha</th><th>Usuario</th><th>Producto</th><th>Cantidad</th><th>Referencia</th></tr></thead>',
