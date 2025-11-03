@@ -1780,8 +1780,8 @@
           const TOP2 = 8;
           const topItems2 = itemsAll.slice(0, TOP2);
           const rest2 = itemsAll.slice(TOP2);
-          const maxQty2 = (itemsAll.length ? itemsAll : topItems2).reduce((m, it) => Math.max(m, Number(it.cantidad)||0), 0);
-          const weight2 = (qty) => (maxQty2 - (Number(qty)||0) + 1);
+          // Proporción inversa estricta para PDF/Excel también
+          const weight2 = (qty) => 1 / Math.max(1, Number(qty)||0);
           const sumRest2 = rest2.reduce((s, it) => s + weight2(it.cantidad), 0);
           const palette2 = ['#ef4444','#f97316','#fb7185','#f43f5e','#ea580c','#dc2626','#e11d48','#fca5a5'];
           const dsCriticos = topItems2.map((it, idx) => ({ label: `${it.codigo} (${it.cantidad})`, value: weight2(it.cantidad), color: palette2[idx % palette2.length] }));
@@ -2188,26 +2188,20 @@
             .filter(d => d.value > 0);
           if (!dsEstados.length) dsEstados.push({ label: 'Sin datos', value: 1, color: '#64748b' });
 
-          // Grafica 2: Productos críticos (solo Cantidad 1..24), tamaño por menor stock
+          // Grafica 2: Productos críticos (solo Cantidad 1..24), tamaño por menor stock (proporción inversa 1/cantidad)
           const items = Array.isArray(critListPayload.items) ? critListPayload.items : [];
           // Orden ascendente por cantidad (menor stock primero)
           items.sort((a,b) => (a.cantidad||0) - (b.cantidad||0));
           const TOP = 8;
           const topItems = items.slice(0, TOP);
           const rest = items.slice(TOP);
-          // Peso inverso: a menor cantidad, mayor tamaño en el pastel
-          const allForScale = items.length ? items : topItems;
-          const maxQty = allForScale.reduce((m, it) => Math.max(m, Number(it.cantidad)||0), 0);
-          const weight = (qty) => (maxQty - (Number(qty)||0) + 1); // siempre >0
+          // Peso inverso estricto: 1 / cantidad
+          const weight = (qty) => 1 / Math.max(1, Number(qty)||0);
           const sumRest = rest.reduce((s, it) => s + weight(it.cantidad), 0);
 
           // Paleta fija (no dependemos de intensidad)
           const palette = ['#ef4444','#f97316','#fb7185','#f43f5e','#ea580c','#dc2626','#e11d48','#fca5a5'];
-          const dsCriticos = topItems.map((it, idx) => ({
-            label: `${it.codigo} (${it.cantidad})`,
-            value: weight(it.cantidad),
-            color: palette[idx % palette.length]
-          }));
+          const dsCriticos = topItems.map((it, idx) => ({ label: `${it.codigo} (${it.cantidad})`, value: weight(it.cantidad), color: palette[idx % palette.length] }));
           if (sumRest > 0) dsCriticos.push({ label: `Otros (${rest.length})`, value: sumRest, color: '#94a3b8' });
           if (!dsCriticos.length) dsCriticos.push({ label: 'Sin críticos', value: 1, color: '#94a3b8' });
 
