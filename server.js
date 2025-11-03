@@ -235,6 +235,43 @@ app.get('/api/reportes/inventario/critico', async (req, res) => {
   }
 });
 
+// Resumen por estado de inventario (para gráfica)
+app.get('/api/reportes/inventario/resumen-estados', async (req, res) => {
+  try {
+    const categoria = String(req.query.categoria || '').trim();
+    const pool = await getPool();
+
+    let filterSqlExists = '';
+    if (categoria) {
+      if (categoria.toLowerCase() === '__none__' || categoria.toLowerCase() === '__sin__' || categoria.toLowerCase() === 'sin categoría' || categoria.toLowerCase() === 'sin categoria') {
+        filterSqlExists = ` AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc WHERE pc.IdProducto = v.IdProducto)`;
+      } else if (categoria.toLowerCase() !== 'todas') {
+        filterSqlExists = ` AND EXISTS (
+          SELECT 1
+          FROM inv.producto_categoria pc
+          JOIN inv.categorias c ON c.IdCategoria = pc.IdCategoria
+          WHERE pc.IdProducto = v.IdProducto
+            AND LOWER(CONVERT(VARCHAR(100), c.Nombre COLLATE Latin1_General_CI_AI)) = LOWER(CONVERT(VARCHAR(100), @cat COLLATE Latin1_General_CI_AI))
+        )`;
+      }
+    }
+
+    const rq = pool.request();
+    if (filterSqlExists.includes('@cat')) rq.input('cat', sql.VarChar(120), categoria);
+    const rows = (await rq.query(`
+      SELECT v.Estado, COUNT(*) AS Total
+      FROM inv.v_productos v
+      WHERE 1=1${filterSqlExists}
+      GROUP BY v.Estado
+    `)).recordset;
+
+    return res.json({ success: true, data: rows.map(r => ({ estado: r.Estado, total: Number(r.Total) })) });
+  } catch (err) {
+    console.error('Error en /api/reportes/inventario/resumen-estados:', err);
+    return res.status(500).json({ success: false, message: 'Error obteniendo resumen de estados' });
+  }
+});
+
 app.post('/api/login', verifyRecaptcha, async (req, res) => {
   try {
     const { usuario, password } = req.body;

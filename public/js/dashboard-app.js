@@ -1742,12 +1742,41 @@
 
       // Botones de 'Gráfica' — abren modal con pie chart de ejemplo
       document.getElementById('invCritChartBtn')?.addEventListener('click', () => {
-        const data = [
-          { label: 'En stock', value: 70 },
-          { label: 'Crítico', value: 20 },
-          { label: 'Agotado', value: 10 }
-        ];
-        openReportPieModal('Stock crítico', data);
+        const cat = (window.invCritFilter && window.invCritFilter.categoria && window.invCritFilter.categoria !== 'Todas')
+          ? `?categoria=${encodeURIComponent(window.invCritFilter.categoria)}`
+          : '';
+        fetch(`/api/reportes/inventario/resumen-estados${cat}`)
+          .then(r => r.json())
+          .then(payload => {
+            if (!payload || !payload.success) throw new Error(payload && payload.message || 'Error');
+            const arr = Array.isArray(payload.data) ? payload.data : [];
+            // Mapear estados a etiquetas/colores del pie
+            const map = {
+              'Stock': { label: 'En stock', color: '#3b82f6' },
+              'Stock bajo': { label: 'Bajo', color: '#a855f7' },
+              'Stock critico': { label: 'Crítico', color: '#22c55e' },
+              'Sin existencias': { label: 'Agotado', color: '#f59e0b' }
+            };
+            const order = ['Stock', 'Stock critico', 'Sin existencias', 'Stock bajo'];
+            const dataset = order
+              .map(k => {
+                const row = arr.find(x => String(x.estado).toLowerCase() === k.toLowerCase());
+                const total = row ? Number(row.total || 0) : 0;
+                return { label: map[k].label, value: total, color: map[k].color };
+              })
+              .filter(d => d.value > 0);
+            if (!dataset.length) dataset.push({ label: 'Sin datos', value: 1, color: '#64748b' });
+            openReportPieModal('Stock crítico', dataset);
+          })
+          .catch(() => {
+            // fallback en caso de error
+            const data = [
+              { label: 'En stock', value: 1 },
+              { label: 'Crítico', value: 1 },
+              { label: 'Agotado', value: 1 }
+            ];
+            openReportPieModal('Stock crítico', data);
+          });
       });
       document.getElementById('invMovChartBtn')?.addEventListener('click', () => {
         const data = [
