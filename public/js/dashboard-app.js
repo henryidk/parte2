@@ -2152,16 +2152,14 @@ function initInventoryMovementsPagination() {
       '      </div>',
       '      <div class="table-responsive">',
       '        <table class="data-table" id="salesCartTable">',
-      '          <thead><tr><th>Código</th><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th><th>Acciones</th></tr></thead>',
+      '          <thead><tr><th>Código</th><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Descuento</th><th>Subtotal</th><th>Acciones</th></tr></thead>',
       '          <tbody id="salesCartBody"></tbody>',
       '        </table>',
       '      </div>',
       '      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:12px; flex-wrap:wrap;">',
       '        <div class="message-container" id="salesPOSMessage"></div>',
       '        <div style="display:flex; align-items:center; gap:12px;">',
-      '          <label for="salesDiscount" style="margin:0;">Descuento</label>',
-      '          <input type="number" id="salesDiscount" min="0" step="0.01" value="0" style="width:120px;">',
-      '          <strong>Subtotal: <span id="salesTotal">0.00</span></strong>',
+      '          <strong>Descuento total (monto ahorrado): <span id="salesTotalSaved">0.00</span></strong>',
       '          <strong>Total: <span id="salesNetTotal">0.00</span></strong>',
       '          <button type="button" class="btn btn-secondary btn-sm" id="posClearBtn">Vaciar</button>',
       '          <button type="button" class="btn btn-primary" id="posCheckoutBtn"><i class="fas fa-check"></i> Finalizar venta</button>',
@@ -2224,7 +2222,7 @@ function initInventoryMovementsPagination() {
       const tbody = document.getElementById('salesCartBody');
       if (!tbody) return;
       if (!cart.length) {
-        tbody.innerHTML = '<tr><td colspan="6"><p class="empty-state">No hay productos en la venta.</p></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7"><p class="empty-state">No hay productos en la venta.</p></td></tr>';
         updateTotals();
         return;
       }
@@ -2235,6 +2233,7 @@ function initInventoryMovementsPagination() {
           <td>${it.name}</td>
           <td><input type=\"number\" class=\"cart-qty\" data-index=\"${idx}\" min=\"1\" value=\"${it.qty}\" style=\"width:80px; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px;\"></td>
           <td></td>
+          <td class=\"cart-discount\">—</td>
           <td>${subtotal.toFixed(2)}</td>
           <td><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-remove=\"${idx}\"><i class=\"fas fa-trash\"></i></button></td>
         </tr>`;
@@ -4552,6 +4551,19 @@ function initInventoryMovementsPagination() {
         modalManager.open('inventoryFiltersModal');
       });
     }
+
+    // Acciones del modal (solo UI)
+    document.getElementById('invFiltersApplyBtn')?.addEventListener('click', () => {
+      modalManager.close('inventoryFiltersModal');
+      try { showToast('Filtros aplicados', 'success'); } catch {}
+    });
+    document.getElementById('invFiltersClearBtn')?.addEventListener('click', () => {
+      const from = document.getElementById('fBitacoraDesde');
+      const to = document.getElementById('fBitacoraHasta');
+      if (from) from.value = '';
+      if (to) to.value = '';
+      try { showToast('Filtros limpios'); } catch {}
+    });
   }
 
   function setupInventoryTabs() {
