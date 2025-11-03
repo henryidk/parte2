@@ -4490,8 +4490,8 @@ function initInventoryMovementsPagination() {
       '        <div class="form-row">',
       '          <div class="form-group" style="position:relative;">',
       '            <label for="entryProductInput">Producto (codigo o nombre)</label>',
-      '            <input type="text" id="entryProductInput" placeholder="Ingresa codigo o nombre..." autocomplete="off" style="width:100%; padding:12px 16px; border:1px solid #e2e8f0; border-radius:8px;">',
-      '            <div id="entryProductResults" style="position:absolute; left:0; right:0; top:70px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; box-shadow:0 10px 24px rgba(0,0,0,0.08); display:none; z-index:50; overflow:hidden;"></div>',
+      '            <input type="text" id="entryProductInput" class="inv-input" placeholder="Ingresa codigo o nombre..." autocomplete="off">',
+      '            <div id="entryProductResults" class="autocomplete-panel" style="position:absolute; left:0; right:0; top:70px; display:none; z-index:50; overflow:hidden;"></div>',
       '          </div>',
       '          <div class="form-group">',
       '            <label for="entryQtyInput">Cantidad a ingresar</label>',
@@ -4708,7 +4708,7 @@ function initInventoryMovementsPagination() {
       }
       last = matches || [];
       if (!last.length) { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; return; }
-      resultsBox.innerHTML = last.map(p => `<div class=\"result-item\" data-code=\"${p.code}\" style=\"padding:10px 12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;\"><span>${p.code} | ${p.name}</span><i class=\"fas fa-arrow-turn-down\"></i></div>`).join('');
+      resultsBox.innerHTML = last.map(p => `<div class=\"result-item\" data-code=\"${p.code}\"><span>${p.code} | ${p.name}</span><i class=\"fas fa-arrow-turn-down\"></i></div>`).join('');
       resultsBox.style.display = 'block';
     };
     const schedule = () => {
@@ -4720,6 +4720,17 @@ function initInventoryMovementsPagination() {
     if (options.showOnFocus !== false) {
       input.addEventListener('focus', schedule);
     }
+    // Enter selecciona la primera sugerencia disponible
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        // Evitar submit accidental del formulario
+        e.preventDefault();
+        if (last && last.length) {
+          try { onSelect(last[0]); } catch(_){}
+        }
+        if (resultsBox) resultsBox.style.display = 'none';
+      }
+    });
     document.addEventListener('click', (e) => {
       if (resultsBox && !resultsBox.contains(e.target) && e.target !== input) resultsBox.style.display = 'none';
     });

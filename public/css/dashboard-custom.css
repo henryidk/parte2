@@ -1054,3 +1054,45 @@ body.dashboard-body.dark-theme .pie-chart { border-color:#0f172a; }
 #categoryProductsModal table.data-table td {
   white-space: nowrap;
 }
+/* Inventory entry: input + autocomplete (light default) */
+.inv-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--input-border, #e2e8f0);
+  background: var(--input-bg, #ffffff);
+  color: var(--input-fg, #0f172a);
+  border-radius: 8px;
+}
+
+.autocomplete-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(15,23,42,0.08);
+  color: #1f2937;
+}
+.autocomplete-panel .result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: inherit;
+}
+.autocomplete-panel .result-item:hover { background: #f1f5f9; }
+.autocomplete-panel .result-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Dark theme overrides */
+body.dashboard-body.dark-theme .inv-input {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-color: #334155;
+}
+body.dashboard-body.dark-theme .autocomplete-panel {
+  background: #0f172a;
+  border-color: #334155;
+  color: #e2e8f0;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+}
+body.dashboard-body.dark-theme .autocomplete-panel .result-item:hover { background: #1f2937; }
