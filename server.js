@@ -186,14 +186,14 @@ app.get('/api/reportes/inventario/critico', async (req, res) => {
     const offset = (page - 1) * limit;
 
     const pool = await getPool();
-    const total = (await pool.request().query('SELECT COUNT(*) AS total FROM inv.productos WHERE Cantidad > 0 AND Cantidad < 25')).recordset[0].total;
+    const total = (await pool.request().query('SELECT COUNT(*) AS total FROM inv.v_productos WHERE Cantidad > 0 AND Cantidad < 25')).recordset[0].total;
 
     const r = pool.request();
     r.input('offset', sql.Int, offset);
     r.input('limit', sql.Int, limit);
     const rows = (await r.query(`
-      SELECT Codigo, Nombre, Cantidad
-      FROM inv.productos
+      SELECT Codigo, Nombre, COALESCE(Categorias, '') AS Categorias, Cantidad
+      FROM inv.v_productos
       WHERE Cantidad > 0 AND Cantidad < 25
       ORDER BY Cantidad ASC, Nombre ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
@@ -201,7 +201,7 @@ app.get('/api/reportes/inventario/critico', async (req, res) => {
 
     return res.json({
       success: true,
-      data: rows.map(x => ({ codigo: x.Codigo, nombre: x.Nombre, disponible: Number(x.Cantidad) })),
+      data: rows.map(x => ({ codigo: x.Codigo, nombre: x.Nombre, categoria: x.Categorias || '(sin categoría)', disponible: Number(x.Cantidad) })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
     });
   } catch (err) {

@@ -1728,11 +1728,11 @@
 
       const critHead = document.getElementById('invCritHead');
       const movHead = document.getElementById('invMovHead');
-      if (critHead) critHead.innerHTML = ['Cdigo', 'Producto', 'Disponible'].map(h => `<th>${h}</th>`).join('');
+      if (critHead) critHead.innerHTML = ['Código', 'Producto', 'Categoría', 'Disponible'].map(h => `<th>${h}</th>`).join('');
       if (movHead) movHead.innerHTML = ['Fecha', 'Producto', 'Cantidad'].map(h => `<th>${h}</th>`).join('');
       const critBody = document.getElementById('invCritBody');
       const movBody = document.getElementById('invMovBody');
-      if (critBody) critBody.innerHTML = '<tr><td colspan="3"><p class="empty-state">Pendiente de backend.</p></td></tr>';
+      if (critBody) critBody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Pendiente de backend.</p></td></tr>';
       if (movBody) movBody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Pendiente de backend.</p></td></tr>';
 
       document.getElementById('invCritPdfBtn')?.addEventListener('click', () => showToast('Exportacin PDF (Stock crtico)'));
@@ -1792,7 +1792,7 @@
           if (pageSizeSelect) window.invCritPager.pageSize = Number(pageSizeSelect.value || window.invCritPager.pageSize || 10) || 10;
           const page = Math.max(1, window.invCritPager.page || 1);
           const limit = Math.max(1, window.invCritPager.pageSize || 10);
-          tbody.innerHTML = '<tr><td colspan="3"><p class="empty-state">Cargando...</p></td></tr>';
+          tbody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Cargando...</p></td></tr>';
           fetch(`/api/reportes/inventario/critico?page=${page}&limit=${limit}`)
             .then(r => r.json())
             .then(data => {
@@ -1800,13 +1800,13 @@
               const rows = Array.isArray(data.data) ? data.data : [];
               window.invCritPager.total = Number(data.pagination?.total || rows.length || 0);
               if (!rows.length) {
-                tbody.innerHTML = '<tr><td colspan="3"><p class="empty-state">Sin datos.</p></td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Sin datos.</p></td></tr>';
                 if (infoEl) infoEl.textContent = 'Mostrando 0-0 de 0';
                 if (prevBtn) prevBtn.disabled = true;
                 if (nextBtn) nextBtn.disabled = true;
                 return;
               }
-              tbody.innerHTML = rows.map(r => `<tr><td>${r.codigo}</td><td>${r.nombre}</td><td>${r.disponible}</td></tr>`).join('');
+              tbody.innerHTML = rows.map(r => `<tr><td>${r.codigo}</td><td>${r.nombre}</td><td>${r.categoria || ''}</td><td>${r.disponible}</td></tr>`).join('');
               const start = (page - 1) * limit + 1;
               const end = Math.min(page * limit, window.invCritPager.total);
               if (infoEl) infoEl.textContent = `Mostrando ${start}-${end} de ${window.invCritPager.total}`;
@@ -1814,7 +1814,7 @@
               if (prevBtn) prevBtn.disabled = page <= 1;
               if (nextBtn) nextBtn.disabled = page >= maxPage;
             })
-            .catch(() => { tbody.innerHTML = '<tr><td colspan="3"><p class="empty-state">Error cargando.</p></td></tr>'; });
+            .catch(() => { tbody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Error cargando.</p></td></tr>'; });
         }
         // Paginación para crítico
         ;(function wireInvCritPager(){
