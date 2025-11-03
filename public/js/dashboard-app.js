@@ -2028,64 +2028,117 @@
           const imgEstados = drawPieToDataUrl(dsEstados, 420);
           const imgCriticos = drawPieToDataUrl(dsCriticos, 420);
 
-          // Crear workbook
+          // Intento 1: cargar plantilla con gráficos nativos si existe
           const wb = new ExcelJS.Workbook();
-          wb.creator = 'Sistema Gestión Universitaria';
-          wb.created = new Date();
+          let templateLoaded = false;
+          try {
+            const resp = await fetch('/templates/reporte_stock_critico_template.xlsx', { cache: 'no-store' });
+            if (resp.ok) {
+              const ab = await resp.arrayBuffer();
+              await wb.xlsx.load(ab);
+              templateLoaded = true;
+            }
+          } catch (_) {}
 
-          // Hoja 1: Tabla
-          const ws = wb.addWorksheet('Stock crítico');
-          const title = 'Reporte de Inventario – Stock crítico';
-          ws.mergeCells('A1:D1');
-          ws.getCell('A1').value = title;
-          ws.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
-          ws.getCell('A1').alignment = { vertical: 'middle', horizontal: 'left' };
-          ws.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF111827' } };
-          ws.getRow(1).height = 22;
-          // Metadatos
-          const fecha = new Date().toLocaleString();
-          const categoria = (window.invCritFilter && window.invCritFilter.categoria) ? window.invCritFilter.categoria : 'Todas';
-          ws.mergeCells('A2:D2');
-          ws.getCell('A2').value = `Fecha: ${fecha}    |    Categoría: ${categoria}`;
-          ws.getCell('A2').font = { size: 10, color: { argb: 'FF334155' } };
-          ws.addRow([]);
-          // Cabecera tabla
-          ws.addRow(['Código', 'Producto', 'Categoría', 'Disponible']);
-          const headerRow = ws.lastRow;
-          headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-          headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
-          headerRow.alignment = { vertical: 'middle' };
-          // Datos
-          rows.forEach(r => ws.addRow([r.codigo, r.nombre, r.categoria || '', Number(r.disponible)]));
-          // Estilos de columnas
-          ws.columns = [
-            { key: 'codigo', width: 16 },
-            { key: 'nombre', width: 42 },
-            { key: 'categoria', width: 30 },
-            { key: 'disp', width: 12 }
-          ];
-          // Zebra
-          const tableStart = 4; // cabecera en fila 4
-          for (let i = tableStart + 1; i <= ws.rowCount; i++) {
-            if (i % 2 === 0) ws.getRow(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+          if (templateLoaded) {
+            // Plantilla debe tener hojas: 'Stock crítico' y 'Datos'
+            const ws = wb.getWorksheet('Stock crítico') || wb.worksheets[0];
+            const wsData = wb.getWorksheet('Datos') || wb.addWorksheet('Datos');
+            // Rellenar tabla en 'Stock crítico' a partir de fila 5 (A5:D5 cabecera)
+            const startRow = 5;
+            ws.getCell(`A${startRow}`).value = 'Código';
+            ws.getCell(`B${startRow}`).value = 'Producto';
+            ws.getCell(`C${startRow}`).value = 'Categoría';
+            ws.getCell(`D${startRow}`).value = 'Disponible';
+            rows.forEach((r, i) => {
+              const ro = startRow + 1 + i;
+              ws.getCell(`A${ro}`).value = r.codigo;
+              ws.getCell(`B${ro}`).value = r.nombre;
+              ws.getCell(`C${ro}`).value = r.categoria || '';
+              ws.getCell(`D${ro}`).value = Number(r.disponible);
+              ws.getCell(`D${ro}`).alignment = { horizontal: 'right' };
+            });
+            // Rellenar hoja 'Datos' para alimentar gráficos nativos
+            wsData.getCell('A1').value = 'Estado';
+            wsData.getCell('B1').value = 'Valor';
+            dsEstados.forEach((d, i) => { wsData.getCell(`A${i+2}`).value = d.label; wsData.getCell(`B${i+2}`).value = d.value; });
+            wsData.getCell('D1').value = 'Producto';
+            wsData.getCell('E1').value = 'Peso';
+            dsCriticos.forEach((d, i) => { wsData.getCell(`D${i+2}`).value = d.label; wsData.getCell(`E${i+2}`).value = d.value; });
+            // Metadatos
+            const fecha = new Date().toLocaleString();
+            const categoria = (window.invCritFilter && window.invCritFilter.categoria) ? window.invCritFilter.categoria : 'Todas';
+            ws.getCell('A1').value = 'Reporte de Inventario – Stock crítico';
+            ws.getCell('A2').value = `Fecha: ${fecha}    |    Categoría: ${categoria}`;
+          } else {
+            // Fallback: construir workbook con imágenes de las gráficas
+            wb.creator = 'Sistema Gestión Universitaria';
+            wb.created = new Date();
+            const ws = wb.addWorksheet('Stock crítico');
+            const title = 'Reporte de Inventario – Stock crítico';
+            ws.mergeCells('A1:D1'); ws.getCell('A1').value = title;
+            ws.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+            ws.getCell('A1').alignment = { vertical: 'middle', horizontal: 'left' };
+            ws.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF111827' } };
+            ws.getRow(1).height = 22;
+            const fecha = new Date().toLocaleString();
+            const categoria = (window.invCritFilter && window.invCritFilter.categoria) ? window.invCritFilter.categoria : 'Todas';
+            ws.mergeCells('A2:D2'); ws.getCell('A2').value = `Fecha: ${fecha}    |    Categoría: ${categoria}`;
+            ws.getCell('A2').font = { size: 10, color: { argb: 'FF334155' } };
+            ws.addRow([]);
+            ws.addRow(['Código', 'Producto', 'Categoría', 'Disponible']);
+            const headerRow = ws.lastRow;
+            headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+            headerRow.alignment = { vertical: 'middle' };
+            rows.forEach(r => ws.addRow([r.codigo, r.nombre, r.categoria || '', Number(r.disponible)]));
+            ws.columns = [ { width: 16 }, { width: 42 }, { width: 30 }, { width: 12 } ];
+            const tableStart = 4; for (let i = tableStart + 1; i <= ws.rowCount; i++) { if (i % 2 === 0) ws.getRow(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } }; }
+            for (let i = tableStart + 1; i <= ws.rowCount; i++) ws.getCell(`D${i}`).alignment = { horizontal: 'right' };
+
+            const ws2 = wb.addWorksheet('Gráficas');
+            // Bloque 1: Estados
+            ws2.getCell('A1').value = 'Estados del inventario';
+            ws2.getCell('A1').font = { bold: true, size: 12, color: { argb: 'FF334155' } };
+            const imgId1 = wb.addImage({ base64: imgEstados.split(',')[1], extension: 'png' });
+            ws2.addImage(imgId1, { tl: { col: 0, row: 1 }, ext: { width: 520, height: 320 } });
+            // Tabla a la derecha con %
+            const startColEstados = 9; // aprox J
+            ws2.getCell(1, startColEstados).value = 'Detalle estados';
+            ws2.getCell(1, startColEstados).font = { bold: true, color: { argb: 'FF334155' } };
+            ws2.getCell(2, startColEstados).value = 'Etiqueta';
+            ws2.getCell(2, startColEstados+1).value = 'Valor';
+            ws2.getCell(2, startColEstados+2).value = '%';
+            let rOff = 3;
+            const totalEstados = dsEstados.reduce((s, d) => s + (Number(d.value)||0), 0) || 1;
+            dsEstados.forEach(d => {
+              ws2.getCell(rOff, startColEstados).value = d.label;
+              ws2.getCell(rOff, startColEstados+1).value = Number(d.value)||0;
+              const pctCell = ws2.getCell(rOff, startColEstados+2); pctCell.value = (Number(d.value)||0)/totalEstados; pctCell.numFmt = '0%';
+              rOff++;
+            });
+            // Bloque 2: Críticos
+            ws2.getCell('A20').value = 'Productos críticos (baja existencia)';
+            ws2.getCell('A20').font = { bold: true, size: 12, color: { argb: 'FF334155' } };
+            const imgId2 = wb.addImage({ base64: imgCriticos.split(',')[1], extension: 'png' });
+            ws2.addImage(imgId2, { tl: { col: 0, row: 21 }, ext: { width: 520, height: 320 } });
+            const startRowCritTab = 21; const startColCrit = 9;
+            ws2.getCell(startRowCritTab, startColCrit).value = 'Detalle críticos';
+            ws2.getCell(startRowCritTab, startColCrit).font = { bold: true, color: { argb: 'FF334155' } };
+            ws2.getCell(startRowCritTab+1, startColCrit).value = 'Producto';
+            ws2.getCell(startRowCritTab+1, startColCrit+1).value = 'Peso';
+            ws2.getCell(startRowCritTab+1, startColCrit+2).value = '%';
+            let rr = startRowCritTab + 2;
+            const totalCrit = dsCriticos.reduce((s, d) => s + (Number(d.value)||0), 0) || 1;
+            dsCriticos.forEach(d => {
+              ws2.getCell(rr, startColCrit).value = d.label;
+              ws2.getCell(rr, startColCrit+1).value = Number(d.value)||0;
+              const p = ws2.getCell(rr, startColCrit+2); p.value = (Number(d.value)||0)/totalCrit; p.numFmt = '0%';
+              rr++;
+            });
+            ws2.getCell('A38').value = 'Más grande = menor stock. Ordenados por menor disponibilidad (sin filtrar por categoría).';
+            ws2.getCell('A38').font = { size: 10, color: { argb: 'FF64748B' } };
           }
-          // Alinear cantidad a la derecha
-          for (let i = tableStart + 1; i <= ws.rowCount; i++) ws.getCell(`D${i}`).alignment = { horizontal: 'right' };
-          ws.getColumn(4).alignment = { horizontal: 'right' };
-
-          // Hoja 2: Gráficas (imágenes)
-          const ws2 = wb.addWorksheet('Gráficas');
-          ws2.getCell('A1').value = 'Estados del inventario';
-          ws2.getCell('A1').font = { bold: true, size: 12, color: { argb: 'FF334155' } };
-          const imgId1 = wb.addImage({ base64: imgEstados.split(',')[1], extension: 'png' });
-          ws2.addImage(imgId1, { tl: { col: 0, row: 1 }, ext: { width: 520, height: 320 } });
-
-          ws2.getCell('A20').value = 'Productos críticos (baja existencia)';
-          ws2.getCell('A20').font = { bold: true, size: 12, color: { argb: 'FF334155' } };
-          const imgId2 = wb.addImage({ base64: imgCriticos.split(',')[1], extension: 'png' });
-          ws2.addImage(imgId2, { tl: { col: 0, row: 21 }, ext: { width: 520, height: 320 } });
-          ws2.getCell('A38').value = 'Más grande = menor stock. Ordenados por menor disponibilidad (sin filtrar por categoría).';
-          ws2.getCell('A38').font = { size: 10, color: { argb: 'FF64748B' } };
 
           // Descargar
           const buffer = await wb.xlsx.writeBuffer();
