@@ -184,17 +184,42 @@ app.get('/api/reportes/inventario/critico', async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page || '1', 10));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '10', 10)));
     const offset = (page - 1) * limit;
+    const categoria = String(req.query.categoria || '').trim();
 
     const pool = await getPool();
-    const total = (await pool.request().query('SELECT COUNT(*) AS total FROM inv.v_productos WHERE Cantidad > 0 AND Cantidad < 25')).recordset[0].total;
+    // Construir filtros dinámicos (opcional por categoría)
+    const whereParts = ['Cantidad > 0', 'Cantidad < 25'];
+    let filterSqlExists = '';
+    if (categoria) {
+      if (categoria.toLowerCase() === '__none__' || categoria.toLowerCase() === '__sin__' || categoria.toLowerCase() === 'sin categoría' || categoria.toLowerCase() === 'sin categoria') {
+        // Productos sin relación en M:N
+        filterSqlExists = ` AND NOT EXISTS (
+            SELECT 1 FROM inv.producto_categoria pc WHERE pc.IdProducto = v.IdProducto
+        )`;
+      } else if (categoria.toLowerCase() !== 'todas') {
+        filterSqlExists = ` AND EXISTS (
+            SELECT 1
+            FROM inv.producto_categoria pc
+            JOIN inv.categorias c ON c.IdCategoria = pc.IdCategoria
+            WHERE pc.IdProducto = v.IdProducto
+              AND LOWER(CONVERT(VARCHAR(100), c.Nombre COLLATE Latin1_General_CI_AI)) = LOWER(CONVERT(VARCHAR(100), @cat COLLATE Latin1_General_CI_AI))
+        )`;
+      }
+    }
+
+    // Total con mismo filtro
+    const rCount = pool.request();
+    if (filterSqlExists.includes('@cat')) rCount.input('cat', sql.VarChar(120), categoria);
+    const total = (await rCount.query(`SELECT COUNT(*) AS total FROM inv.v_productos v WHERE ${whereParts.join(' AND ')}${filterSqlExists}`)).recordset[0].total;
 
     const r = pool.request();
     r.input('offset', sql.Int, offset);
     r.input('limit', sql.Int, limit);
+    if (filterSqlExists.includes('@cat')) r.input('cat', sql.VarChar(120), categoria);
     const rows = (await r.query(`
       SELECT Codigo, Nombre, COALESCE(Categorias, '') AS Categorias, Cantidad
-      FROM inv.v_productos
-      WHERE Cantidad > 0 AND Cantidad < 25
+      FROM inv.v_productos v
+      WHERE ${whereParts.join(' AND ')}${filterSqlExists}
       ORDER BY Cantidad ASC, Nombre ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `)).recordset;

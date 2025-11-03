@@ -1761,8 +1761,45 @@
         const modTitle2 = document.getElementById('reportFiltersTitle');
         if (modTitle2) modTitle2.innerHTML = '<i class="fas fa-filter"></i> Filtros de Stock crítico';
         const box2 = document.getElementById('repFiltersModalBox');
-        if (box2) box2.innerHTML = `<div class="filter-form"><div class="form-row">${selectFilterHtml('Categoría crítica', 'fCritCategoria', ['Todas'])}<div></div></div></div>`;
-        modalManager.open('reportFiltersModal');
+        // Cargar categorías reales desde backend y poblar el select
+        fetch('/api/productos/catalogo/categorias')
+          .then(r => r.json())
+          .then(data => {
+            const categorias = Array.isArray(data?.categorias) ? data.categorias : [];
+            const opts = ['Todas', ...categorias];
+            if (box2) box2.innerHTML = `<div class="filter-form"><div class="form-row">${selectFilterHtml('Categorías', 'fCategoria', opts)}<div></div></div></div>`;
+            const sel = document.getElementById('fCategoria');
+            const current = (window.invCritFilter && window.invCritFilter.categoria) ? window.invCritFilter.categoria : 'Todas';
+            if (sel && opts.includes(current)) sel.value = current;
+            const applyBtn = document.getElementById('repModalApplyBtn');
+            const clearBtn = document.getElementById('repModalClearBtn');
+            if (applyBtn) applyBtn.onclick = () => {
+              const val = document.getElementById('fCategoria')?.value || 'Todas';
+              window.invCritFilter = { categoria: val };
+              modalManager.close('reportFiltersModal');
+              try { showToast('Filtros aplicados', 'success'); } catch {}
+              // Forzar recarga de la tabla de crítico si existe el renderizador
+              try { if (typeof renderInvCrit === 'function') {} } catch {}
+              // Ejecuta el render local dentro del scope
+              if (typeof window.invCritRender === 'function') { window.invCritRender(); }
+              // Fallback: dispara un evento para que el bloque de render lo intercepte
+              window.dispatchEvent(new CustomEvent('report:invCrit:filters-applied'));
+            };
+            if (clearBtn) clearBtn.onclick = () => {
+              window.invCritFilter = { categoria: 'Todas' };
+              const s = document.getElementById('fCategoria'); if (s) s.value = 'Todas';
+              try { showToast('Filtros limpios'); } catch {}
+              if (typeof window.invCritRender === 'function') { window.invCritRender(); }
+              window.dispatchEvent(new CustomEvent('report:invCrit:filters-applied'));
+              modalManager.close('reportFiltersModal');
+            };
+            modalManager.open('reportFiltersModal');
+          })
+          .catch(() => {
+            // Si falla, abrir con solo 'Todas'
+            if (box2) box2.innerHTML = `<div class="filter-form"><div class="form-row">${selectFilterHtml('Categorías', 'fCategoria', ['Todas'])}<div></div></div></div>`;
+            modalManager.open('reportFiltersModal');
+          });
       });
       document.getElementById('invMovFiltersBtn')?.addEventListener('click', () => {
         const modTitle3 = document.getElementById('reportFiltersTitle');
@@ -1793,7 +1830,8 @@
           const page = Math.max(1, window.invCritPager.page || 1);
           const limit = Math.max(1, window.invCritPager.pageSize || 10);
           tbody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Cargando...</p></td></tr>';
-          fetch(`/api/reportes/inventario/critico?page=${page}&limit=${limit}`)
+          const cat = (window.invCritFilter && window.invCritFilter.categoria && window.invCritFilter.categoria !== 'Todas') ? `&categoria=${encodeURIComponent(window.invCritFilter.categoria)}` : '';
+          fetch(`/api/reportes/inventario/critico?page=${page}&limit=${limit}${cat}`)
             .then(r => r.json())
             .then(data => {
               if (!data || !data.success) throw new Error(data && data.message || 'Error');
@@ -1816,6 +1854,12 @@
             })
             .catch(() => { tbody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Error cargando.</p></td></tr>'; });
         }
+        // Exponer para que el handler de filtros pueda forzar recarga
+        window.invCritRender = renderInvCrit;
+        // También escuchar un evento simple
+        window.addEventListener('report:invCrit:filters-applied', () => {
+          try { renderInvCrit(); } catch {}
+        });
         // Paginación para crítico
         ;(function wireInvCritPager(){
           const pageSizeSelect = document.getElementById('repInvCritPageSize');
