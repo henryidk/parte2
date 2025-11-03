@@ -299,6 +299,126 @@ CREATE INDEX IX_ven_det_IdVenta  ON ven.venta_detalle(IdVenta);
 GO
 
 ------------------------------------------------------------
+-- A.9) Datos de prueba – Ventas del año en curso
+--     Inserta ventas para la mayoría de los días del año actual
+--     (cabecera, detalle y bitácora coherentes)
+------------------------------------------------------------
+DECLARE @y INT = YEAR(GETDATE());
+DECLARE @d0 DATE = DATEFROMPARTS(@y,1,1);
+DECLARE @d1 DATE = DATEFROMPARTS(@y,12,31);
+
+-- Capturar IdVenta generados para actualizar totales después (usar #temp para persistir entre lotes)
+IF OBJECT_ID('tempdb..#Ventas') IS NOT NULL DROP TABLE #Ventas;
+CREATE TABLE #Ventas (
+  IdVenta   BIGINT PRIMARY KEY,
+  FechaHora DATETIME2(0),
+  Usuario   VARCHAR(50)
+);
+
+;WITH n AS (
+  SELECT TOP (366) ROW_NUMBER() OVER(ORDER BY (SELECT NULL)) - 1 AS i
+  FROM sys.objects
+), dias AS (
+  SELECT d = DATEADD(DAY, i, @d0) FROM n WHERE DATEADD(DAY, i, @d0) <= @d1
+), dias_muestreados AS (
+  -- 80% de los días del año
+  SELECT d FROM dias WHERE ABS(CHECKSUM(NEWID(), d)) % 10 < 8
+)
+INSERT INTO ven.ventas(FechaHora, Usuario, Cliente, FormaPago, Subtotal, DescuentoTotal, Total)
+OUTPUT INSERTED.IdVenta, INSERTED.FechaHora, INSERTED.Usuario INTO #Ventas(IdVenta, FechaHora, Usuario)
+SELECT
+  DATEADD(HOUR, 9 + ABS(CHECKSUM(NEWID(), d)) % 10, CAST(d AS DATETIME2(0))) AS FechaHora,
+  CASE WHEN ABS(CHECKSUM(NEWID(), d)) % 2 = 0 THEN 'admin' ELSE 'secretaria' END AS Usuario,
+  NULL AS Cliente,
+  CASE ABS(CHECKSUM(NEWID(), d)) % 3 WHEN 0 THEN 'Efectivo' WHEN 1 THEN 'Tarjeta' ELSE 'Transferencia' END AS FormaPago,
+  0, 0, 0
+FROM dias_muestreados;
+GO
+
+-- Insertar detalles (1 a 3 productos por venta) con cantidades 1..5
+INSERT INTO ven.venta_detalle(IdVenta, IdProducto, Codigo, Producto, Cantidad, Precio, Descuento, Subtotal)
+SELECT
+  v.IdVenta,
+  p.IdProducto,
+  p.Codigo,
+  p.Nombre,
+  q.qty,
+  p.PrecioVenta AS Precio,
+  p.Descuento,
+  CAST(ROUND(p.PrecioVenta * (1 - (p.Descuento/100.0)) * q.qty, 2) AS DECIMAL(18,2)) AS Subtotal
+FROM #Ventas v
+CROSS APPLY (
+  SELECT TOP 3 IdProducto, Codigo, Nombre, PrecioVenta, Descuento, ROW_NUMBER() OVER(ORDER BY NEWID()) AS rn
+  FROM inv.productos
+) p
+CROSS APPLY (
+  SELECT 1 + ABS(CHECKSUM(NEWID(), v.IdVenta, p.Codigo)) % 5 AS qty,
+         1 + ABS(CHECKSUM(NEWID(), v.IdVenta)) % 3 AS takeN
+) q
+WHERE p.rn <= q.takeN;
+GO
+
+-- Actualizar totales de las ventas insertadas
+UPDATE v
+SET v.Subtotal = s.Bruto,
+    v.Total    = s.Neto,
+    v.DescuentoTotal = s.Bruto - s.Neto
+FROM ven.ventas v
+JOIN (
+  SELECT IdVenta,
+         SUM(Precio * Cantidad) AS Bruto,
+         SUM(Subtotal)          AS Neto
+  FROM ven.venta_detalle
+  GROUP BY IdVenta
+) s ON s.IdVenta = v.IdVenta
+WHERE v.FechaHora >= DATEFROMPARTS(YEAR(GETDATE()),1,1)
+  AND v.FechaHora <  DATEADD(DAY,1, DATEFROMPARTS(YEAR(GETDATE()),12,31));
+GO
+
+-- Rebajar inventario según las ventas insertadas del año en curso
+;WITH qty AS (
+  SELECT d.IdProducto, SUM(d.Cantidad) AS Qty
+  FROM ven.venta_detalle d
+  JOIN ven.ventas v ON v.IdVenta = d.IdVenta
+  WHERE v.FechaHora >= DATEFROMPARTS(YEAR(GETDATE()),1,1)
+    AND v.FechaHora <  DATEADD(DAY,1, DATEFROMPARTS(YEAR(GETDATE()),12,31))
+  GROUP BY d.IdProducto
+)
+UPDATE p
+SET p.Cantidad = CASE WHEN p.Cantidad >= q.Qty THEN p.Cantidad - q.Qty ELSE 0 END
+FROM inv.productos p
+JOIN qty q ON q.IdProducto = p.IdProducto;
+GO
+
+-- Bitácora de ventas coherente
+-- Asegurar existencia del esquema SEG y de seg.tbBitacoraVentas (si aún no existen en este punto del script)
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'seg')
+BEGIN
+  EXEC('CREATE SCHEMA seg AUTHORIZATION dbo;');
+END
+;
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID('seg.tbBitacoraVentas') AND type = 'U')
+BEGIN
+  EXEC('CREATE TABLE seg.tbBitacoraVentas (
+    IdBit BIGINT IDENTITY(1,1) PRIMARY KEY,
+    IdVenta BIGINT NOT NULL,
+    Usuario VARCHAR(50) NOT NULL,
+    FechaHora DATETIME2(0) NOT NULL CONSTRAINT DF_BitVentas_FH2 DEFAULT(SYSDATETIME()),
+    DescuentoTotal DECIMAL(18,2) NOT NULL,
+    Total DECIMAL(18,2) NOT NULL
+  );');
+END
+;
+
+INSERT INTO seg.tbBitacoraVentas(IdVenta, Usuario, FechaHora, DescuentoTotal, Total)
+SELECT v.IdVenta, v.Usuario, v.FechaHora, v.DescuentoTotal, v.Total
+FROM ven.ventas v
+WHERE v.FechaHora >= DATEFROMPARTS(YEAR(GETDATE()),1,1)
+  AND v.FechaHora <  DATEADD(DAY,1, DATEFROMPARTS(YEAR(GETDATE()),12,31))
+  AND NOT EXISTS (SELECT 1 FROM seg.tbBitacoraVentas b WHERE b.IdVenta = v.IdVenta);
+GO
+
+------------------------------------------------------------
 -- A.7) Movimientos de inventario y SP de entradas
 ------------------------------------------------------------
 IF OBJECT_ID('inv.movimientos_inventario') IS NOT NULL
