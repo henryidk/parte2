@@ -178,6 +178,38 @@ app.get('/api/inventario/movimientos', async (req, res) => {
   }
 });
 
+// Reporte: Stock crítico (paginado)
+app.get('/api/reportes/inventario/critico', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '10', 10)));
+    const offset = (page - 1) * limit;
+
+    const pool = await getPool();
+    const total = (await pool.request().query('SELECT COUNT(*) AS total FROM inv.productos WHERE Cantidad > 0 AND Cantidad < 25')).recordset[0].total;
+
+    const r = pool.request();
+    r.input('offset', sql.Int, offset);
+    r.input('limit', sql.Int, limit);
+    const rows = (await r.query(`
+      SELECT Codigo, Nombre, Cantidad
+      FROM inv.productos
+      WHERE Cantidad > 0 AND Cantidad < 25
+      ORDER BY Cantidad ASC, Nombre ASC
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `)).recordset;
+
+    return res.json({
+      success: true,
+      data: rows.map(x => ({ codigo: x.Codigo, nombre: x.Nombre, disponible: Number(x.Cantidad) })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+    });
+  } catch (err) {
+    console.error('Error en /api/reportes/inventario/critico:', err);
+    return res.status(500).json({ success: false, message: 'Error obteniendo stock crítico' });
+  }
+});
+
 app.post('/api/login', verifyRecaptcha, async (req, res) => {
   try {
     const { usuario, password } = req.body;

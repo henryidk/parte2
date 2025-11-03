@@ -1728,11 +1728,11 @@
 
       const critHead = document.getElementById('invCritHead');
       const movHead = document.getElementById('invMovHead');
-      if (critHead) critHead.innerHTML = ['Cdigo', 'Producto', 'Disponible', 'Mnimo'].map(h => `<th>${h}</th>`).join('');
+      if (critHead) critHead.innerHTML = ['Cdigo', 'Producto', 'Disponible'].map(h => `<th>${h}</th>`).join('');
       if (movHead) movHead.innerHTML = ['Fecha', 'Producto', 'Cantidad'].map(h => `<th>${h}</th>`).join('');
       const critBody = document.getElementById('invCritBody');
       const movBody = document.getElementById('invMovBody');
-      if (critBody) critBody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Pendiente de backend.</p></td></tr>';
+      if (critBody) critBody.innerHTML = '<tr><td colspan="3"><p class="empty-state">Pendiente de backend.</p></td></tr>';
       if (movBody) movBody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Pendiente de backend.</p></td></tr>';
 
       document.getElementById('invCritPdfBtn')?.addEventListener('click', () => showToast('Exportacin PDF (Stock crtico)'));
@@ -1779,6 +1779,57 @@
       });
       // Paginación placeholders para ambas tablas
       ensureReportsInventarioPaginationUI();
+      // Cargar datos reales de Stock crítico
+      ;(function initInvCrit(){
+        const tbody = document.getElementById('invCritBody');
+        if (!tbody) return;
+        window.invCritPager = { page: 1, pageSize: Number(document.getElementById('repInvCritPageSize')?.value || 10) || 10, total: 0 };
+        function renderInvCrit() {
+          const infoEl = document.getElementById('repInvCritPageInfo');
+          const prevBtn = document.getElementById('repInvCritPrev');
+          const nextBtn = document.getElementById('repInvCritNext');
+          const pageSizeSelect = document.getElementById('repInvCritPageSize');
+          if (pageSizeSelect) window.invCritPager.pageSize = Number(pageSizeSelect.value || window.invCritPager.pageSize || 10) || 10;
+          const page = Math.max(1, window.invCritPager.page || 1);
+          const limit = Math.max(1, window.invCritPager.pageSize || 10);
+          tbody.innerHTML = '<tr><td colspan="3"><p class="empty-state">Cargando...</p></td></tr>';
+          fetch(`/api/reportes/inventario/critico?page=${page}&limit=${limit}`)
+            .then(r => r.json())
+            .then(data => {
+              if (!data || !data.success) throw new Error(data && data.message || 'Error');
+              const rows = Array.isArray(data.data) ? data.data : [];
+              window.invCritPager.total = Number(data.pagination?.total || rows.length || 0);
+              if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="3"><p class="empty-state">Sin datos.</p></td></tr>';
+                if (infoEl) infoEl.textContent = 'Mostrando 0-0 de 0';
+                if (prevBtn) prevBtn.disabled = true;
+                if (nextBtn) nextBtn.disabled = true;
+                return;
+              }
+              tbody.innerHTML = rows.map(r => `<tr><td>${r.codigo}</td><td>${r.nombre}</td><td>${r.disponible}</td></tr>`).join('');
+              const start = (page - 1) * limit + 1;
+              const end = Math.min(page * limit, window.invCritPager.total);
+              if (infoEl) infoEl.textContent = `Mostrando ${start}-${end} de ${window.invCritPager.total}`;
+              const maxPage = Math.max(1, Math.ceil(window.invCritPager.total / limit));
+              if (prevBtn) prevBtn.disabled = page <= 1;
+              if (nextBtn) nextBtn.disabled = page >= maxPage;
+            })
+            .catch(() => { tbody.innerHTML = '<tr><td colspan="3"><p class="empty-state">Error cargando.</p></td></tr>'; });
+        }
+        // Paginación para crítico
+        ;(function wireInvCritPager(){
+          const pageSizeSelect = document.getElementById('repInvCritPageSize');
+          const prevBtn = document.getElementById('repInvCritPrev');
+          const nextBtn = document.getElementById('repInvCritNext');
+          if (pageSizeSelect) {
+            window.invCritPager.pageSize = Number(pageSizeSelect.value || 10) || 10;
+            pageSizeSelect.onchange = () => { window.invCritPager.pageSize = Number(pageSizeSelect.value) || 10; window.invCritPager.page = 1; renderInvCrit(); };
+          }
+          if (prevBtn) prevBtn.onclick = () => { if (window.invCritPager.page > 1) { window.invCritPager.page -= 1; renderInvCrit(); } };
+          if (nextBtn) nextBtn.onclick = () => { const maxPage = Math.max(1, Math.ceil((window.invCritPager.total || 0) / (window.invCritPager.pageSize || 10))); if (window.invCritPager.page < maxPage) { window.invCritPager.page += 1; renderInvCrit(); } };
+        })();
+        renderInvCrit();
+      })();
       return;
     }
     const base2 = ensureReportsBase();
