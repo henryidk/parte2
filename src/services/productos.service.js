@@ -1,4 +1,4 @@
-﻿const { getPool: getDbPool, sql } = require('../db/pool');
+�const { getPool: getDbPool, sql } = require('../db/pool');
 
 // Pool de BD centralizado en ../db/pool (getDbPool)
 
@@ -15,7 +15,7 @@ async function createProducto({ codigo, nombre, categorias = null, precioCosto, 
   const exists = await p.request().input('Codigo', sql.VarChar(50), finalCode)
     .query('SELECT 1 FROM inv.productos WHERE Codigo = @Codigo');
   if (exists.recordset.length > 0) {
-    const e = new Error('CÃ³digo ya existe');
+    const e = new Error('Código ya existe');
     e.code = 'PRODUCT_CODE_EXISTS';
     throw e;
   }
@@ -38,7 +38,7 @@ async function createProducto({ codigo, nombre, categorias = null, precioCosto, 
     FROM inv.productos WHERE Codigo = @Codigo
   `)).recordset[0];
 
-  // BitÃ¡cora (opcional)
+  // Bitácora (opcional)
   try {
     await p.request()
       .input('Usuario', sql.VarChar(50), usuarioEjecutor || 'sistema')
@@ -84,12 +84,12 @@ async function listProductos({ page = 1, limit = 10, search = '', estado = '', c
   if (categoria && String(categoria).trim()) {
     const cval = String(categoria).trim();
     if (cval === '__NONE__') {
-      // Productos sin categorÃ­as asociadas (relaciÃ³n M:N)
+      // Productos sin categorías asociadas (relación M:N)
       whereParts.push(`NOT EXISTS (
           SELECT 1 FROM inv.producto_categoria pc WHERE pc.IdProducto = v.IdProducto
         )`);
     } else {
-      // Filtro robusto: existencia en la relaciÃ³n M:N por nombre exacto
+      // Filtro robusto: existencia en la relación M:N por nombre exacto
       whereParts.push(`EXISTS (
           SELECT 1
           FROM inv.producto_categoria pc
@@ -142,7 +142,7 @@ async function getProductoByCodigo(codigo) {
             FROM ${view} WHERE Codigo = @Codigo`);
   if (r.recordset.length === 0) return null;
   const row = r.recordset[0];
-  // Normalizar categorÃ­as a array
+  // Normalizar categorías a array
   const cats = (row.Categorias && typeof row.Categorias === 'string')
     ? row.Categorias.split(/[;|,]/).map(s => s.trim()).filter(Boolean)
     : [];
@@ -236,7 +236,7 @@ async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta
   }
   const idProd = prod.recordset[0].IdProducto;
 
-  // Actualizar campos bÃ¡sicos si vienen
+  // Actualizar campos básicos si vienen
   const setParts = [];
   const reqUpd = p.request();
   reqUpd.input('IdProducto', sql.Int, idProd);
@@ -246,7 +246,7 @@ async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta
   if (descuento != null) { setParts.push('Descuento = @Descuento'); reqUpd.input('Descuento', sql.Decimal(5,2), Number(descuento)); }
   if (cantidad != null) { setParts.push('Cantidad = @Cantidad'); reqUpd.input('Cantidad', sql.Int, Number(cantidad)); }
 
-  // Si vienen categorÃ­as, sincronizar relaciÃ³n M:N
+  // Si vienen categorías, sincronizar relación M:N
   let finalCats = null;
   if (Array.isArray(categorias)) {
     // Mapear nombres a IdCategoria
@@ -280,7 +280,7 @@ async function updateProductoByCodigo({ codigo, nombre, precioCosto, precioVenta
       }
       finalCats = names; // Para reflejar en columna de texto
     } else {
-      // Si viene array vacÃ­o, limpiar asociaciones
+      // Si viene array vacío, limpiar asociaciones
       await p.request().input('IdProducto', sql.Int, idProd)
         .query('DELETE FROM inv.producto_categoria WHERE IdProducto=@IdProducto');
       finalCats = [];
@@ -321,7 +321,7 @@ async function deleteProductoByCodigo(codigo) {
   await p.request().input('IdProducto', sql.Int, idProd)
     .query('DELETE FROM inv.productos WHERE IdProducto = @IdProducto');
 
-  // BitÃ¡cora (best-effort)
+  // Bitácora (best-effort)
   try {
     await p.request()
       .input('Usuario', sql.VarChar(50), 'sistema')
