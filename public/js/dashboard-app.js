@@ -2827,15 +2827,27 @@ function initInventoryMovementsPagination() {
   }
 
   function setupPOS() {
-    const products = (DASHBOARD_DATA[role]?.productos?.list || DASHBOARD_DATA.admin?.productos?.list || []).map(p => ({ code: p.code, name: p.name }));
+    // Sugerencias desde backend (código o nombre)
     const input = document.getElementById('posProductInput');
     const box = document.getElementById('posProductResults');
-    invCreateAutocomplete(input, box, products, (prod) => {
+    invCreateAutocomplete(input, box, [], (prod) => {
       input.value = prod.code + ' | ' + prod.name;
       box.style.display = 'none';
       const qtyEl = document.getElementById('posQtyInput');
       if (qtyEl) qtyEl.focus();
-    }, { showOnFocus: false });
+    }, {
+      showOnFocus: false,
+      minChars: 1,
+      debounceMs: 180,
+      fetcher: async (term, { signal } = {}) => {
+        const q = encodeURIComponent(term || '');
+        const r = await fetch(`/api/productos/suggest?q=${q}`, { signal });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || d.success === false) return [];
+        const items = Array.isArray(d.items) ? d.items : [];
+        return items.map(it => ({ code: it.code, name: it.name }));
+      }
+    });
 
     const cart = [];
     function renderCart() {
@@ -2847,13 +2859,15 @@ function initInventoryMovementsPagination() {
         return;
       }
       tbody.innerHTML = cart.map((it, idx) => {
-        const subtotal = (it.price || 0) * it.qty;
+        const unit = Number(it.price || 0);
+        const disc = Number(it.discount || 0);
+        const subtotal = (unit * (1 - (disc/100))) * it.qty;
         return `<tr>
           <td>${it.code}</td>
           <td>${it.name}</td>
           <td><input type=\"number\" class=\"cart-qty\" data-index=\"${idx}\" min=\"1\" value=\"${it.qty}\" style=\"width:80px; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px;\"></td>
-          <td></td>
-          <td class=\"cart-discount\">—</td>
+          <td>${unit.toFixed(2)}</td>
+          <td class=\"cart-discount\">${disc ? (disc.toFixed(2) + '%') : '—'}</td>
           <td>${subtotal.toFixed(2)}</td>
           <td><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-remove=\"${idx}\"><i class=\"fas fa-trash\"></i></button></td>
         </tr>`;
@@ -2880,7 +2894,7 @@ function initInventoryMovementsPagination() {
       updateTotals();
     }
 
-    function sumSubtotal() { return cart.reduce((acc, it) => acc + (it.price || 0) * it.qty, 0); }
+    function sumSubtotal() { return cart.reduce((acc, it) => acc + (Number(it.price||0) * (1 - (Number(it.discount||0)/100))) * it.qty, 0); }
     function updateTotals() {
       const subtotal = sumSubtotal();
       const disc = parseFloat(document.getElementById('salesDiscount')?.value || '0') || 0;
@@ -2893,14 +2907,40 @@ function initInventoryMovementsPagination() {
 
     document.getElementById('salesDiscount')?.addEventListener('input', updateTotals);
 
-    function addFromQtyEnter() {
+    async function addFromQtyEnter() {
       const val = (input?.value || '').trim();
       const qty = parseInt(document.getElementById('posQtyInput')?.value || '0', 10);
       if (!val) return invSetMessage('salesPOSMessage', 'error', 'Selecciona un producto.');
       if (!qty || qty <= 0) return invSetMessage('salesPOSMessage', 'error', 'Ingresa una cantidad vlida.');
       const code = val.split('|')[0].trim();
-      const found = products.find(p => p.code === code) || { code, name: val.replace(/^.*\|/, '').trim() };
-      cart.push({ code: found.code, name: found.name, qty, price: 0 });
+      try {
+        // Si ya existe en carrito, sumar cantidad
+        const existing = cart.find(it => it.code === code);
+        if (existing) {
+          existing.qty += qty;
+          invClearMessage('salesPOSMessage');
+          renderCart();
+          const q = document.getElementById('posQtyInput'); if (q) q.value = '';
+          input.value = '';
+          return;
+        }
+        // Obtener detalles reales del producto
+        const resp = await fetch(`/api/productos/${encodeURIComponent(code)}`);
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || data.success === false || !data.product) {
+          // fallback: usar lo que se ve en el input
+          const name = val.includes('|') ? val.split('|')[1].trim() : val;
+          cart.push({ code, name, qty, price: 0, discount: 0 });
+        } else {
+          const p = data.product;
+          const price = Number(p.precioVenta || p.precio || 0) || 0;
+          const discount = Number(p.descuento || 0) || 0;
+          cart.push({ code: p.codigo || code, name: p.nombre || '', qty, price, discount });
+        }
+      } catch(_) {
+        const name = val.includes('|') ? val.split('|')[1].trim() : val;
+        cart.push({ code, name, qty, price: 0, discount: 0 });
+      }
       invClearMessage('salesPOSMessage');
       renderCart();
       const q = document.getElementById('posQtyInput'); if (q) q.value = '';
