@@ -115,6 +115,9 @@
       <div class="stats-grid" id="inventoryStats"></div>
 
       <div class="panel-actions" style="display:flex; justify-content:flex-end; gap:8px; margin:8px 0 16px;">
+        <button class="btn btn-secondary btn-sm" id="inventoryFiltersBtn" type="button">
+          <i class="fas fa-filter"></i> Filtros
+        </button>
         <button class="btn btn-primary btn-sm" id="inventoryNewEntryBtn">
           <i class="fas fa-arrow-down"></i> Registrar entrada
         </button>
@@ -157,8 +160,11 @@
       </div>
 
       <div class="panel-card">
-        <div class="card-header">
+        <div class="card-header" style="display:flex; align-items:center; justify-content:space-between;">
           <h3>Bitácora de inventario</h3>
+          <button class="btn btn-secondary btn-sm" id="inventoryFiltersBtn" type="button">
+            <i class="fas fa-filter"></i> Filtros
+          </button>
         </div>
         <div class="table-responsive">
           <table class="data-table" id="inventoryMovementsTable" hidden>
@@ -583,6 +589,35 @@
       <div class="modal-footer">
         <button type="button" class="btn-primary" data-action="closeModal"
           data-modal="categoryDetailModal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Filtros Bitácora de Inventario (UI solamente) -->
+  <div class="modal-overlay" id="inventoryFiltersModal" aria-hidden="true">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 id="invFiltersTitle"><i class="fas fa-filter"></i> Filtros de Bitácora</h3>
+        <button class="modal-close" data-action="closeModal" data-modal="inventoryFiltersModal">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="invFiltersModalBox" class="filter-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Desde</label>
+              <input type="date" id="fBitacoraDesde" class="filter-input" />
+            </div>
+            <div class="form-group">
+              <label>Hasta</label>
+              <input type="date" id="fBitacoraHasta" class="filter-input" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" data-action="closeModal" data-modal="inventoryFiltersModal">Cerrar</button>
       </div>
     </div>
   </div>

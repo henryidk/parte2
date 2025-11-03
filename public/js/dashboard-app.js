@@ -1919,6 +1919,21 @@
       modalManager.open('inventoryMovementModal');
     });
 
+    // Abrir modal de filtros (solo UI; sin lógica de filtrado)
+    document.getElementById('inventoryFiltersBtn')?.addEventListener('click', () => {
+      const titleEl = document.getElementById('invFiltersTitle');
+      if (titleEl) titleEl.innerHTML = '<i class="fas fa-filter"></i> Filtros de Bitácora';
+      const boxEl = document.getElementById('invFiltersModalBox');
+      if (boxEl) {
+        boxEl.innerHTML = `
+          <div class="filter-form">
+            ${dateFilterHtml('fBitacoraDesde', 'fBitacoraHasta')}
+          </div>
+        `;
+      }
+      modalManager.open('inventoryFiltersModal');
+    });
+
     // Autocomplete producto usando lista de productos del dashboard
     const invInput = document.getElementById('invProdInput');
     const invResults = document.getElementById('invProdResults');
@@ -4502,7 +4517,7 @@ function initInventoryMovementsPagination() {
       '</div>',
       '<div id="invLogContent" class="bitacora-content">',
       '  <div class="panel-card">',
-      '    <div class="card-header"><h3>Bitacora de inventario</h3></div>',
+      '    <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; gap:12px;"><h3>Bitacora de inventario</h3><button class="btn btn-secondary btn-sm" id="inventoryFiltersBtn" type="button"><i class="fas fa-filter"></i> Filtros</button></div>',
       '    <div class="table-responsive">',
       '      <table class="data-table" id="inventoryMovementsTable">',
       '        <thead><tr><th>Fecha</th><th>Usuario</th><th>Producto</th><th>Cantidad</th><th>Referencia</th></tr></thead>',
@@ -4519,6 +4534,24 @@ function initInventoryMovementsPagination() {
     ensureInventoryMovementsPaginationUI();
     initInventoryMovementsPagination();
     renderInventoryMovements();
+
+    // Botón "Filtros" en Bitácora: abre modal con rango de fechas (solo UI)
+    const invFiltersBtn = document.getElementById('inventoryFiltersBtn');
+    if (invFiltersBtn) {
+      invFiltersBtn.addEventListener('click', () => {
+        const titleEl = document.getElementById('invFiltersTitle');
+        if (titleEl) titleEl.innerHTML = '<i class="fas fa-filter"></i> Filtros de Bitácora';
+        const boxEl = document.getElementById('invFiltersModalBox');
+        if (boxEl) {
+          boxEl.innerHTML = `
+            <div class="filter-form">
+              ${dateFilterHtml('fBitacoraDesde', 'fBitacoraHasta')}
+            </div>
+          `;
+        }
+        modalManager.open('inventoryFiltersModal');
+      });
+    }
   }
 
   function setupInventoryTabs() {
