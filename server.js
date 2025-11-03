@@ -24,6 +24,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
+// Logger sencillo para diagnosticar rutas (temporal)
+app.use((req, _res, next) => {
+  if (req.url.startsWith('/api/ventas')) {
+    console.log(`[ventas] ${req.method} ${req.url}`);
+  }
+  next();
+});
+
 
 // Uso de pool compartido vÃ­a getPool()
 let pool; // declarado solo para compatibilidad con manejadores antiguos
@@ -656,6 +664,163 @@ app.get('/api/usuarios', async (req, res) => {
             total: 0
         });
     }
+});
+
+// === VENTAS ===
+// Registrar una venta con detalle y rebajar inventario
+app.post('/api/ventas', async (req, res) => {
+  const payload = req.body || {};
+  const usuario = String(payload.usuario || 'sistema');
+  const cliente = payload.cliente ? String(payload.cliente).slice(0, 150) : null;
+  const formaPago = String(payload.formaPago || 'Efectivo').slice(0, 20);
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  if (!items.length) return res.status(400).json({ success: false, message: 'No hay items en la venta' });
+
+  try {
+    const pool = await getPool();
+    let tx;
+    tx = new sql.Transaction(pool);
+    await tx.begin();
+    const r = new sql.Request(tx);
+
+    // Normalizar y calcular totales
+    let bruto = 0, neto = 0;
+    const norm = [];
+    for (const it of items) {
+      const code = String(it.code || it.codigo || '').trim();
+      if (!code) { await tx.rollback(); return res.status(400).json({ success: false, message: 'Item sin código' }); }
+      const qty = Math.max(1, parseInt(it.qty || it.cantidad || '1', 10));
+      const price = Number(it.price || it.precio || 0);
+      const discount = Number(it.discount || it.descuento || 0) || 0;
+      const lineBruto = price * qty;
+      const lineNeto = price * (1 - (discount / 100)) * qty;
+      bruto += lineBruto; neto += lineNeto;
+      norm.push({ code, qty, price, discount, lineNeto });
+    }
+    const ahorro = Math.max(0, bruto - neto);
+
+    // Insert cabecera
+    const now = new Date();
+    const rqHead = new sql.Request(tx);
+    rqHead.input('FH', sql.DateTime2, now);
+    rqHead.input('Usuario', sql.VarChar(50), usuario);
+    rqHead.input('Cliente', sql.NVarChar(150), cliente);
+    rqHead.input('FormaPago', sql.VarChar(20), formaPago);
+    rqHead.input('Subtotal', sql.Decimal(18,2), bruto);
+    rqHead.input('DescuentoTotal', sql.Decimal(18,2), ahorro);
+    rqHead.input('Total', sql.Decimal(18,2), neto);
+    const insHead = await rqHead.query(`
+      INSERT INTO ven.ventas(FechaHora, Usuario, Cliente, FormaPago, Subtotal, DescuentoTotal, Total)
+      OUTPUT INSERTED.IdVenta
+      VALUES(@FH, @Usuario, @Cliente, @FormaPago, @Subtotal, @DescuentoTotal, @Total)
+    `);
+    const idVenta = insHead.recordset[0].IdVenta;
+
+    // Insert detalle + rebaja inventario
+    for (const it of norm) {
+      // Resolver producto por código
+      const rf = new sql.Request(tx);
+      rf.input('Codigo', sql.VarChar(50), it.code);
+      const prod = (await rf.query('SELECT TOP 1 IdProducto, Nombre, Cantidad FROM inv.productos WHERE Codigo=@Codigo')).recordset[0];
+      if (!prod) { await tx.rollback(); return res.status(400).json({ success:false, message:`Código no encontrado: ${it.code}` }); }
+
+      // Insert detalle
+      const rd = new sql.Request(tx);
+      rd.input('IdVenta', sql.BigInt, idVenta);
+      rd.input('IdProducto', sql.Int, prod.IdProducto);
+      rd.input('Codigo', sql.VarChar(50), it.code);
+      rd.input('Producto', sql.NVarChar(150), prod.Nombre);
+      rd.input('Cantidad', sql.Int, it.qty);
+      rd.input('Precio', sql.Decimal(18,2), it.price);
+      rd.input('Descuento', sql.Decimal(5,2), it.discount);
+      rd.input('Subtotal', sql.Decimal(18,2), it.lineNeto);
+      await rd.query(`
+        INSERT INTO ven.venta_detalle(IdVenta, IdProducto, Codigo, Producto, Cantidad, Precio, Descuento, Subtotal)
+        VALUES(@IdVenta, @IdProducto, @Codigo, @Producto, @Cantidad, @Precio, @Descuento, @Subtotal)
+      `);
+
+      // Rebajar inventario (sin negativos)
+      const ru = new sql.Request(tx);
+      ru.input('IdProducto', sql.Int, prod.IdProducto);
+      ru.input('Qty', sql.Int, it.qty);
+      await ru.query('UPDATE inv.productos SET Cantidad = CASE WHEN Cantidad >= @Qty THEN Cantidad - @Qty ELSE 0 END WHERE IdProducto=@IdProducto');
+    }
+
+    // Bitácora de ventas
+    const rb = new sql.Request(tx);
+    rb.input('IdVenta', sql.BigInt, idVenta);
+    rb.input('Usuario', sql.VarChar(50), usuario);
+    rb.input('FH', sql.DateTime2, now);
+    rb.input('Ahorro', sql.Decimal(18,2), ahorro);
+    rb.input('Total', sql.Decimal(18,2), neto);
+    await rb.query('INSERT INTO seg.tbBitacoraVentas(IdVenta, Usuario, FechaHora, DescuentoTotal, Total) VALUES(@IdVenta, @Usuario, @FH, @Ahorro, @Total)');
+
+    await tx.commit();
+    return res.json({ success: true, idVenta, totals: { subtotal: bruto, descuento: ahorro, total: neto } });
+  } catch (err) {
+    console.error('Error registrando venta:', err);
+    try { if (typeof tx !== 'undefined') await tx.rollback(); } catch(_){}
+    const msg = (err && err.number === 208) || /invalid object name|objeto no válido|no existe la tabla/i.test(String(err && err.message))
+      ? 'Esquema de ventas no instalado. Ejecuta database/DB_pt2.sql y reinicia el servidor.'
+      : (err && err.message) || 'Error registrando venta';
+    return res.status(500).json({ success:false, message: msg });
+  }
+});
+
+// Listado (bitácora) de ventas recientes
+app.get('/api/ventas/bitacora', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '20', 10)));
+    const offset = (page - 1) * limit;
+    const pool = await getPool();
+    const total = (await pool.request().query('SELECT COUNT(*) AS total FROM ven.ventas')).recordset[0].total;
+    const r = pool.request();
+    r.input('offset', sql.Int, offset);
+    r.input('limit', sql.Int, limit);
+    const rows = (await r.query(`
+      SELECT v.IdVenta, v.FechaHora, v.Usuario, v.DescuentoTotal
+      FROM ven.ventas v
+      ORDER BY v.FechaHora DESC
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `)).recordset;
+    return res.json({ success: true, data: rows.map(x => ({ id: x.IdVenta, fechaHora: x.FechaHora, usuario: x.Usuario, descuentoTotal: Number(x.DescuentoTotal) })), pagination: { page, limit, total, totalPages: Math.ceil(total/limit) } });
+  } catch (err) {
+    console.error('Error en /api/ventas/bitacora:', err);
+    return res.status(500).json({ success: false, message: 'Error obteniendo bitácora de ventas' });
+  }
+});
+
+// Detalle de venta
+app.get('/api/ventas/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ success:false, message:'Id de venta inválido' });
+    const pool = await getPool();
+    const head = (await pool.request().input('Id', sql.BigInt, id).query(`
+      SELECT IdVenta, FechaHora, Usuario, Cliente, FormaPago, Subtotal, DescuentoTotal, Total
+      FROM ven.ventas WHERE IdVenta = @Id
+    `)).recordset[0];
+    if (!head) return res.status(404).json({ success:false, message:'Venta no encontrada' });
+    const items = (await pool.request().input('Id', sql.BigInt, id).query(`
+      SELECT Codigo, Producto, Cantidad, Precio, Descuento, Subtotal
+      FROM ven.venta_detalle WHERE IdVenta = @Id ORDER BY IdDetalle ASC
+    `)).recordset;
+    return res.json({ success:true, venta: {
+      id: head.IdVenta,
+      fechaHora: head.FechaHora,
+      usuario: head.Usuario,
+      cliente: head.Cliente || '',
+      formaPago: head.FormaPago,
+      subtotal: Number(head.Subtotal),
+      descuentoTotal: Number(head.DescuentoTotal),
+      total: Number(head.Total),
+      items: items.map(r => ({ codigo: r.Codigo, producto: r.Producto, cantidad: Number(r.Cantidad), precio: Number(r.Precio), descuento: Number(r.Descuento), subtotal: Number(r.Subtotal) }))
+    }});
+  } catch (err) {
+    console.error('Error en GET /api/ventas/:id:', err);
+    return res.status(500).json({ success:false, message:'Error obteniendo detalle de venta' });
+  }
 });
 
 // Ruta para obtener un usuario especÃ­fico por ID
@@ -1395,6 +1560,16 @@ process.on('SIGINT', async () => {
 
 
 startServer();
+
+// Ruta de salud para verificar servidor y rutas cargadas
+app.get('/api/health', (_req, res) => {
+  try {
+    const routes = [];
+    res.json({ ok: true, routesHint: {
+      ventas: ['/api/ventas (POST)', '/api/ventas/bitacora (GET)', '/api/ventas/:id (GET)']
+    }});
+  } catch (_) { res.json({ ok: true }); }
+});
 
 
 

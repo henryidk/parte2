@@ -18,6 +18,13 @@ USE DB_parte2;
 GO
 
 /* =========================================================
+   SECCIÓN A.0) ESQUEMA DE VENTAS (ven)
+   ========================================================= */
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'ven')
+    EXEC('CREATE SCHEMA ven');
+GO
+
+/* =========================================================
    SECCIÓN A) INVENTARIO
    ========================================================= */
 
@@ -252,6 +259,46 @@ GROUP BY p.IdProducto, p.Codigo, p.Nombre, p.PrecioCosto, p.PrecioVenta,
 GO
 
 ------------------------------------------------------------
+-- A.8) Tablas de ventas (cabecera/detalle)
+------------------------------------------------------------
+IF OBJECT_ID('ven.venta_detalle') IS NOT NULL DROP TABLE ven.venta_detalle;
+IF OBJECT_ID('ven.ventas') IS NOT NULL DROP TABLE ven.ventas;
+GO
+
+CREATE TABLE ven.ventas
+(
+    IdVenta        BIGINT IDENTITY(1,1) PRIMARY KEY,
+    FechaHora      DATETIME2(0) NOT NULL CONSTRAINT DF_ven_ventas_FH DEFAULT(SYSDATETIME()),
+    Usuario        VARCHAR(50)  NOT NULL,
+    Cliente        NVARCHAR(150) NULL,
+    FormaPago      VARCHAR(20)  NOT NULL,
+    Subtotal       DECIMAL(18,2) NOT NULL,
+    DescuentoTotal DECIMAL(18,2) NOT NULL,
+    Total          DECIMAL(18,2) NOT NULL
+);
+GO
+
+CREATE TABLE ven.venta_detalle
+(
+    IdDetalle   BIGINT IDENTITY(1,1) PRIMARY KEY,
+    IdVenta     BIGINT NOT NULL,
+    IdProducto  INT    NOT NULL,
+    Codigo      VARCHAR(50)   NOT NULL,
+    Producto    NVARCHAR(150) NOT NULL,
+    Cantidad    INT NOT NULL CHECK(Cantidad > 0),
+    Precio      DECIMAL(18,2) NOT NULL,
+    Descuento   DECIMAL(5,2)  NOT NULL,
+    Subtotal    DECIMAL(18,2) NOT NULL,
+    CONSTRAINT FK_ven_det_venta   FOREIGN KEY(IdVenta)    REFERENCES ven.ventas(IdVenta) ON DELETE CASCADE,
+    CONSTRAINT FK_ven_det_produ   FOREIGN KEY(IdProducto) REFERENCES inv.productos(IdProducto)
+);
+GO
+
+CREATE INDEX IX_ven_ventas_Fecha ON ven.ventas(FechaHora DESC);
+CREATE INDEX IX_ven_det_IdVenta  ON ven.venta_detalle(IdVenta);
+GO
+
+------------------------------------------------------------
 -- A.7) Movimientos de inventario y SP de entradas
 ------------------------------------------------------------
 IF OBJECT_ID('inv.movimientos_inventario') IS NOT NULL
@@ -384,6 +431,20 @@ CREATE TABLE seg.tbBitacoraTransacciones
     Entidad       VARCHAR(60)  NOT NULL,
     ClaveEntidad  VARCHAR(120) NULL,
     Detalle       NVARCHAR(300) NULL
+);
+GO
+
+-- Bitácora de ventas
+IF OBJECT_ID('seg.tbBitacoraVentas') IS NOT NULL DROP TABLE seg.tbBitacoraVentas;
+GO
+CREATE TABLE seg.tbBitacoraVentas
+(
+    IdBit    BIGINT IDENTITY(1,1) PRIMARY KEY,
+    IdVenta  BIGINT       NOT NULL,
+    Usuario  VARCHAR(50)  NOT NULL,
+    FechaHora DATETIME2(0) NOT NULL CONSTRAINT DF_BitVentas_FH DEFAULT(SYSDATETIME()),
+    DescuentoTotal DECIMAL(18,2) NOT NULL,
+    Total    DECIMAL(18,2) NOT NULL
 );
 GO
 

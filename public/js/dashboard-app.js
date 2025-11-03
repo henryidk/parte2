@@ -2793,9 +2793,26 @@ function initInventoryMovementsPagination() {
       '    <div class="card-header"><h3>Bitácora de ventas</h3></div>',
       '    <div class="table-responsive">',
       '      <table class="data-table" id="salesTable">',
-      '        <thead><tr><th>Fecha</th><th>Usuario</th><th>Categoría</th><th>Subtotal</th><th>Descuento</th><th>Total</th></tr></thead>',
+      '        <thead><tr><th>ID</th><th>Fecha</th><th>Usuario</th><th>Descuento total</th><th>Acciones</th></tr></thead>',
       '        <tbody></tbody>',
       '      </table>',
+      '    </div>',
+      '  </div>',
+      '</div>',
+      // Modal de detalle de venta (UI)
+      '<div class="modal-overlay" id="saleDetailModal" aria-hidden="true">',
+      '  <div class="modal-container">',
+      '    <div class="modal-header">',
+      '      <h2 id="saleDetailTitle"><i class="fas fa-receipt"></i> Detalle de venta</h2>',
+      '      <button class="modal-close" data-action="closeModal" data-modal="saleDetailModal"><i class="fas fa-times"></i></button>',
+      '    </div>',
+      '    <div class="modal-body">',
+      '      <div id="saleDetailBody">',
+      '        <p class="card-subtitle" style="color:#64748b;">Conectado al backend próximamente.</p>',
+      '      </div>',
+      '    </div>',
+      '    <div class="modal-footer">',
+      '      <button type="button" class="btn-primary" data-action="closeModal" data-modal="saleDetailModal"><i class="fas fa-check"></i> Cerrar</button>',
       '    </div>',
       '  </div>',
       '</div>'
@@ -2894,18 +2911,17 @@ function initInventoryMovementsPagination() {
       updateTotals();
     }
 
-    function sumSubtotal() { return cart.reduce((acc, it) => acc + (Number(it.price||0) * (1 - (Number(it.discount||0)/100))) * it.qty, 0); }
+    function sumGross() { return cart.reduce((acc, it) => acc + (Number(it.price || 0) * it.qty), 0); }
+    function sumNet() { return cart.reduce((acc, it) => acc + (Number(it.price||0) * (1 - (Number(it.discount||0)/100))) * it.qty, 0); }
     function updateTotals() {
-      const subtotal = sumSubtotal();
-      const disc = parseFloat(document.getElementById('salesDiscount')?.value || '0') || 0;
-      const total = Math.max(0, subtotal - Math.max(0, disc));
-      const totalEl = document.getElementById('salesTotal');
+      const gross = sumGross();
+      const net = sumNet();
+      const saved = Math.max(0, gross - net);
+      const savedEl = document.getElementById('salesTotalSaved');
       const netEl = document.getElementById('salesNetTotal');
-      if (totalEl) totalEl.textContent = subtotal.toFixed(2);
-      if (netEl) netEl.textContent = total.toFixed(2);
+      if (savedEl) savedEl.textContent = saved.toFixed(2);
+      if (netEl) netEl.textContent = net.toFixed(2);
     }
-
-    document.getElementById('salesDiscount')?.addEventListener('input', updateTotals);
 
     async function addFromQtyEnter() {
       const val = (input?.value || '').trim();
@@ -2952,13 +2968,34 @@ function initInventoryMovementsPagination() {
 
     document.getElementById('posClearBtn')?.addEventListener('click', () => { cart.splice(0, cart.length); renderCart(); invClearMessage('salesPOSMessage'); });
 
-    document.getElementById('posCheckoutBtn')?.addEventListener('click', () => {
+    document.getElementById('posCheckoutBtn')?.addEventListener('click', async () => {
       if (!cart.length) return invSetMessage('salesPOSMessage', 'error', 'Agrega productos a la venta.');
-      // Backend registrar la venta; aqu solo UI
-      cart.splice(0, cart.length);
-      renderCart();
-      invSetMessage('salesPOSMessage', 'success', 'Venta realizada.');
-      try { showToast('Venta realizada', 'success'); } catch { }
+      const btn = document.getElementById('posCheckoutBtn');
+      const prev = btn?.innerHTML;
+      if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Procesando...'; }
+      try {
+        const usuario = localStorage.getItem('userName') || localStorage.getItem('currentUser') || 'Usuario';
+        const cliente = document.getElementById('salesCustomer')?.value?.trim() || '';
+        const formaPago = document.getElementById('salesPayment')?.value || 'Efectivo';
+        const payload = {
+          usuario,
+          cliente,
+          formaPago,
+          items: cart.map(it => ({ code: it.code, nombre: it.name, qty: it.qty, price: Number(it.price||0), discount: Number(it.discount||0) }))
+        };
+        const resp = await fetch('/api/ventas', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || data.success === false) throw new Error(data.message || 'No se pudo registrar la venta');
+        // Limpiar carrito
+        cart.splice(0, cart.length);
+        renderCart();
+        invSetMessage('salesPOSMessage', 'success', `Venta #${data.idVenta} realizada. Total: ${Number(data?.totals?.total||0).toFixed(2)}`);
+        try { showToast(`Venta #${data.idVenta} registrada`, 'success'); } catch {}
+      } catch (e) {
+        invSetMessage('salesPOSMessage', 'error', e.message || 'Error registrando venta');
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = prev; }
+      }
     });
 
     // Render inicial del carrito
@@ -2968,8 +3005,73 @@ function initInventoryMovementsPagination() {
   function renderSalesLog() {
     const tbody = document.querySelector('#salesTable tbody');
     if (!tbody) return;
-    // Backend poblar esta tabla; placeholder de diseo
-    tbody.innerHTML = '<tr><td colspan="6"><p class="empty-state">Conectado al backend prximamente.</p></td></tr>';
+    // Cargar bitácora desde backend
+    fetch('/api/ventas/bitacora?page=1&limit=20')
+      .then(r => r.json())
+      .then(data => {
+        if (!data || data.success === false) throw new Error(data && data.message || 'Error');
+        const rows = Array.isArray(data.data) ? data.data : [];
+        if (!rows.length) {
+          tbody.innerHTML = '<tr><td colspan="5"><p class="empty-state">Sin ventas registradas.</p></td></tr>';
+          return;
+        }
+        tbody.innerHTML = rows.map(v => `
+          <tr>
+            <td>${v.id}</td>
+            <td>${formatDateTimeSafe(v.fechaHora)}</td>
+            <td>${escapeHtml(v.usuario||'')}</td>
+            <td>${Number(v.descuentoTotal||0).toFixed(2)}</td>
+            <td><button type="button" class="btn btn-secondary btn-sm" title="Visualizar" data-view="${v.id}"><i class="fas fa-eye"></i></button></td>
+          </tr>
+        `).join('');
+      })
+      .catch(() => { tbody.innerHTML = '<tr><td colspan="5"><p class="empty-state">No se pudo cargar la bitácora.</p></td></tr>'; });
+
+    // Delegación para botón visualizar
+    tbody.onclick = (e) => {
+      const btn = e.target.closest('[data-view]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-view');
+      const titleEl = document.getElementById('saleDetailTitle');
+      const bodyEl = document.getElementById('saleDetailBody');
+      if (titleEl) titleEl.innerHTML = `<i class="fas fa-receipt"></i> Detalle de venta #${id || ''}`;
+      if (bodyEl) bodyEl.innerHTML = '<p class="card-subtitle" style="color:#64748b;">Cargando detalle...</p>';
+      fetch(`/api/ventas/${encodeURIComponent(id)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (!data || data.success === false) throw new Error(data && data.message || 'Error');
+          const v = data.venta || {};
+          const items = Array.isArray(v.items) ? v.items : [];
+          if (bodyEl) {
+            bodyEl.innerHTML = [
+              '<div class="panel-card" style="box-shadow:none;">',
+              '  <div class="card-header" style="justify-content:space-between;">',
+              `    <div><strong>Fecha:</strong> ${formatDateTimeSafe(v.fechaHora)} &nbsp; <strong>Usuario:</strong> ${escapeHtml(v.usuario||'')}</div>`,
+              `    <div><strong>Cliente:</strong> ${escapeHtml(v.cliente||'')} &nbsp; <strong>Pago:</strong> ${escapeHtml(v.formaPago||'')}</div>`,
+              '  </div>',
+              '  <div class="panel-body" style="padding:0;">',
+              '    <div class="table-responsive">',
+              '      <table class="data-table">',
+              '        <thead><tr><th>Código</th><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Desc.</th><th>Subtotal</th></tr></thead>',
+              `        <tbody>${items.map(it => `<tr><td>${it.codigo}</td><td>${escapeHtml(it.producto||'')}</td><td>${it.cantidad}</td><td>${Number(it.precio||0).toFixed(2)}</td><td>${Number(it.descuento||0).toFixed(2)}%</td><td>${Number(it.subtotal||0).toFixed(2)}</td></tr>`).join('')}</tbody>`,
+              '      </table>',
+              '    </div>',
+              `    <div style="display:flex; gap:16px; justify-content:flex-end; padding:12px 8px;">`+
+              `      <strong>Subtotal:</strong> <span>${Number(v.subtotal||0).toFixed(2)}</span>`+
+              `      <strong>Descuento total:</strong> <span>${Number(v.descuentoTotal||0).toFixed(2)}</span>`+
+              `      <strong>Total:</strong> <span>${Number(v.total||0).toFixed(2)}</span>`+
+              '    </div>',
+              '  </div>',
+              '</div>'
+            ].join('');
+          }
+          try { modalManager.open('saleDetailModal'); } catch(_) {}
+        })
+        .catch(err => {
+          if (bodyEl) bodyEl.innerHTML = `<p class="message error"><i class="fas fa-exclamation-triangle"></i> ${escapeHtml(err.message||'No se pudo obtener el detalle')}</p>`;
+          try { modalManager.open('saleDetailModal'); } catch(_) {}
+        });
+    };
   }
 
   function renderProductos(data) {
