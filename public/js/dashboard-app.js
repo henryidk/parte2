@@ -1681,7 +1681,7 @@
     let summaryBox, chartsBox, head, body;
     if (base) { ({ summaryBox, chartsBox, head, body } = base); }
 
-    // Layout especfico para Inventario: 2 tablas con acciones
+    // Layout específico para Inventario: SOLO Stock crítico (se elimina Movimientos)
     if (key === 'inventario') {
       const openBtn = document.getElementById('repOpenFiltersBtn');
       const topPdfBtn = document.getElementById('repExportPdf');
@@ -1706,34 +1706,13 @@
         '      <tbody id="invCritBody"></tbody>',
         '    </table>',
         '  </div>',
-        '</div>',
-        '<div class="panel-subcard">',
-        '  <div class="card-header" style="align-items:center; gap:12px;">',
-        '    <h3>Movimientos (entradas y salidas)</h3>',
-        '    <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">',
-        '      <button class="btn btn-secondary btn-sm" id="invMovFiltersBtn"><i class="fas fa-filter"></i> Filtros</button>',
-        '      <button class="btn btn-primary btn-sm" id="invMovPdfBtn"><i class="fas fa-file-pdf"></i> PDF</button>',
-        '      <button class="btn btn-primary btn-sm" id="invMovXlsBtn"><i class="fas fa-file-excel"></i> Excel</button>',
-        '      <button class="btn btn-secondary btn-sm" id="invMovChartBtn"><i class="fas fa-chart-pie"></i> Gráfica</button>',
-        '    </div>',
-        '  </div>',
-        '  <div class="table-responsive">',
-        '    <table class="data-table">',
-        '      <thead><tr id="invMovHead"></tr></thead>',
-        '      <tbody id="invMovBody"></tbody>',
-        '    </table>',
-        '  </div>',
         '</div>'
       ].join('');
 
       const critHead = document.getElementById('invCritHead');
-      const movHead = document.getElementById('invMovHead');
       if (critHead) critHead.innerHTML = ['Código', 'Producto', 'Categoría', 'Disponible'].map(h => `<th>${h}</th>`).join('');
-      if (movHead) movHead.innerHTML = ['Fecha', 'Producto', 'Cantidad'].map(h => `<th>${h}</th>`).join('');
       const critBody = document.getElementById('invCritBody');
-      const movBody = document.getElementById('invMovBody');
       if (critBody) critBody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Pendiente de backend.</p></td></tr>';
-      if (movBody) movBody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Pendiente de backend.</p></td></tr>';
 
       document.getElementById('invCritPdfBtn')?.addEventListener('click', async () => {
         try {
@@ -2153,8 +2132,6 @@
           showToast('No se pudo generar el Excel', 'error');
         }
       });
-      document.getElementById('invMovPdfBtn')?.addEventListener('click', () => showToast('Exportacin PDF (Movimientos)'));
-      document.getElementById('invMovXlsBtn')?.addEventListener('click', () => showToast('Exportacin Excel (Movimientos)'));
 
       // Botones de 'Gráfica' — abren modal con pie chart de ejemplo
       document.getElementById('invCritChartBtn')?.addEventListener('click', () => {
@@ -2274,14 +2251,6 @@
           openReportPieModal('Gráficas de inventario', []);
         });
       });
-      document.getElementById('invMovChartBtn')?.addEventListener('click', () => {
-        const data = [
-          { label: 'Entradas', value: 60 },
-          { label: 'Salidas', value: 40 }
-        ];
-        openReportPieModal('Movimientos de inventario', data);
-      });
-
       document.getElementById('invCritFiltersBtn')?.addEventListener('click', () => {
         const modTitle2 = document.getElementById('reportFiltersTitle');
         if (modTitle2) modTitle2.innerHTML = '<i class="fas fa-filter"></i> Filtros de Stock crítico';
@@ -2326,21 +2295,8 @@
             modalManager.open('reportFiltersModal');
           });
       });
-      document.getElementById('invMovFiltersBtn')?.addEventListener('click', () => {
-        const modTitle3 = document.getElementById('reportFiltersTitle');
-        if (modTitle3) modTitle3.innerHTML = '<i class="fas fa-filter"></i> Filtros de Movimientos';
-        const box3 = document.getElementById('repFiltersModalBox');
-        if (box3) box3.innerHTML = `
-          <div class="filter-form">
-            <div class="form-row">
-              ${selectFilterHtml('Categoría crítica', 'fMovCategoria', ['Todas'])}
-              ${selectFilterHtml('Tipo', 'fMovTipo', ['Todos', 'Entradas', 'Salidas'])}
-            </div>
-          </div>`;
-        modalManager.open('reportFiltersModal');
-      });
-      // Paginación placeholders para ambas tablas
-      ensureReportsInventarioPaginationUI();
+      // Paginación placeholder solo para crítico
+      ensureReportsInventarioPaginationUI && ensureReportsInventarioPaginationUI();
       // Cargar datos reales de Stock crítico
       ;(function initInvCrit(){
         const tbody = document.getElementById('invCritBody');
