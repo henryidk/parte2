@@ -1735,48 +1735,293 @@
       if (critBody) critBody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Pendiente de backend.</p></td></tr>';
       if (movBody) movBody.innerHTML = '<tr><td colspan="4"><p class="empty-state">Pendiente de backend.</p></td></tr>';
 
-      document.getElementById('invCritPdfBtn')?.addEventListener('click', () => showToast('Exportacin PDF (Stock crtico)'));
+      document.getElementById('invCritPdfBtn')?.addEventListener('click', async () => {
+        try {
+          const { jsPDF } = window.jspdf || {};
+          if (!jsPDF || typeof window.jspdf === 'undefined' || typeof (jsPDF) !== 'function') {
+            return showToast('Librería jsPDF no cargada. Reintenta o verifica conexión.', 'error');
+          }
+          // 1) Datos de tabla visibles (página actual + filtro)
+          const page = Math.max(1, (window.invCritPager && window.invCritPager.page) || 1);
+          const limit = Math.max(1, (window.invCritPager && window.invCritPager.pageSize) || 10);
+          const catParam = (window.invCritFilter && window.invCritFilter.categoria && window.invCritFilter.categoria !== 'Todas')
+            ? `&categoria=${encodeURIComponent(window.invCritFilter.categoria)}`
+            : '';
+          const [tablePayload, chartPayload] = await Promise.all([
+            fetch(`/api/reportes/inventario/critico?page=${page}&limit=${limit}${catParam}`).then(r => r.json()),
+            fetch(`/api/reportes/inventario/resumen-estados${catParam ? '?' + catParam.slice(1) : ''}`).then(r => r.json())
+          ]);
+          if (!tablePayload?.success) throw new Error(tablePayload?.message || 'Error obteniendo tabla');
+          if (!chartPayload?.success) throw new Error(chartPayload?.message || 'Error obteniendo gráfica');
+
+          const rows = Array.isArray(tablePayload.data) ? tablePayload.data : [];
+          const resumen = Array.isArray(chartPayload.data) ? chartPayload.data : [];
+
+          // 2) Preparar dataset de gráfica para dibujar en Canvas
+          const map = {
+            'Stock': { label: 'En stock', color: '#3b82f6' },
+            'Stock bajo': { label: 'Bajo', color: '#a855f7' },
+            'Stock critico': { label: 'Crítico', color: '#22c55e' },
+            'Sin existencias': { label: 'Agotado', color: '#f59e0b' }
+          };
+          const order = ['Stock', 'Stock critico', 'Sin existencias', 'Stock bajo'];
+          const chartData = order.map(k => {
+            const r = resumen.find(x => String(x.estado).toLowerCase() === k.toLowerCase());
+            return { label: map[k].label, value: r ? Number(r.total || 0) : 0, color: map[k].color };
+          }).filter(d => d.value > 0);
+          if (!chartData.length) chartData.push({ label: 'Sin datos', value: 1, color: '#64748b' });
+
+          function drawPieToDataUrl(dataset, size = 220) {
+            const total = dataset.reduce((s, d) => s + (Number(d.value) || 0), 0) || 1;
+            const canvas = document.createElement('canvas');
+            canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            let start = -Math.PI / 2;
+            dataset.forEach(d => {
+              const slice = (Number(d.value) || 0) / total * Math.PI * 2;
+              ctx.beginPath();
+              ctx.moveTo(size/2, size/2);
+              ctx.arc(size/2, size/2, size/2 - 6, start, start + slice);
+              ctx.closePath();
+              ctx.fillStyle = d.color || '#999';
+              ctx.fill();
+              start += slice;
+            });
+            // Borde
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, size/2 - 6, 0, Math.PI * 2);
+            ctx.strokeStyle = '#1f2937';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            return canvas.toDataURL('image/png');
+          }
+
+          const chartImg = drawPieToDataUrl(chartData, 260);
+
+          // 3) Construir PDF profesional — Tabla primero, luego gráfica
+          const doc = new jsPDF('p', 'pt', 'a4');
+          const pageWidth = doc.internal.pageSize.getWidth();
+          const pageHeight = doc.internal.pageSize.getHeight();
+          const margin = 40;
+          const headerH = 64;
+          const titulo = 'Reporte de Inventario – Stock crítico';
+          const fecha = new Date().toLocaleString();
+          const categoria = (window.invCritFilter && window.invCritFilter.categoria) ? window.invCritFilter.categoria : 'Todas';
+
+          // Header de color oscuro
+          doc.setFillColor(17, 24, 39); // #111827
+          doc.rect(0, 0, pageWidth, headerH, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+          doc.text(titulo, margin, 38);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+          const metaRightX = pageWidth - margin;
+          doc.text(`Fecha: ${fecha}`, metaRightX, 24, { align: 'right' });
+          doc.text(`Categoría: ${categoria}`, metaRightX, 40, { align: 'right' });
+
+          // Línea/acento
+          doc.setDrawColor(59, 130, 246); // azul
+          doc.setLineWidth(1);
+          doc.line(margin, headerH, pageWidth - margin, headerH);
+
+          // Sección: Tabla
+          let cursorY = headerH + 22;
+          doc.setTextColor(51, 65, 85); // gris oscuro
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+          doc.text('Detalle de productos en stock crítico (vista actual)', margin, cursorY);
+          cursorY += 10;
+
+          const autoTable = (doc).autoTable;
+          if (typeof autoTable === 'function') {
+            doc.autoTable({
+              startY: cursorY + 6,
+              head: [['Código', 'Producto', 'Categoría', 'Disponible']],
+              body: rows.map(r => [r.codigo, r.nombre, r.categoria || '', String(r.disponible)]),
+              styles: { fontSize: 9, cellPadding: 6, valign: 'middle', textColor: [31,41,55] },
+              headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+              alternateRowStyles: { fillColor: [249, 250, 251] },
+              columnStyles: {
+                0: { cellWidth: 90 },
+                1: { cellWidth: 220 },
+                2: { cellWidth: 160 },
+                3: { halign: 'right', cellWidth: 80 }
+              },
+              margin: { left: margin, right: margin },
+              theme: 'grid'
+            });
+            cursorY = doc.lastAutoTable.finalY + 22;
+          } else {
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+            let y = cursorY + 14; doc.text('Código | Producto | Categoría | Disponible', margin, y); y += 14;
+            rows.forEach(r => { doc.text(`${r.codigo} | ${r.nombre} | ${r.categoria || ''} | ${r.disponible}`, margin, y); y += 14; });
+            cursorY = y + 14;
+          }
+
+          // Si no hay espacio para la gráfica, nueva página
+          const chartBlockH = 300; // aprox (gráfica + títulos/leyenda)
+          if (cursorY + chartBlockH > pageHeight - 60) {
+            doc.addPage();
+            // header simple en páginas siguientes
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+            cursorY = margin;
+          }
+
+          // Sección: Gráfica
+          doc.setTextColor(51, 65, 85);
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+          doc.text('Distribución por estado', margin, cursorY);
+          cursorY += 8;
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+          doc.text('Estados considerados: En stock, Crítico, Agotado, Bajo', margin, cursorY);
+          cursorY += 10;
+
+          const chartSize = 240;
+          // Centrar la gráfica
+          const chartX = margin;
+          doc.addImage(chartImg, 'PNG', chartX, cursorY, chartSize, chartSize);
+
+          // Leyenda a la derecha de la gráfica
+          function hexToRgb(hex){
+            const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex||'');
+            if(!m) return [100,100,100];
+            return [parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)];
+          }
+          let legendY = cursorY + 10;
+          const legendX = chartX + chartSize + 24;
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
+          chartData.forEach(d => {
+            const [r,g,b] = hexToRgb(d.color);
+            doc.setFillColor(r,g,b);
+            doc.circle(legendX, legendY - 3, 4, 'F');
+            doc.text(`${d.label} (${d.value})`, legendX + 14, legendY);
+            legendY += 16;
+          });
+
+          // Footer: número de página con línea superior
+          const pageCount = doc.getNumberOfPages();
+          for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            const y = doc.internal.pageSize.getHeight() - 28;
+            doc.setDrawColor(229, 231, 235); doc.setLineWidth(0.5); doc.line(margin, y, pageWidth - margin, y);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+            const footer = `Página ${i} de ${pageCount}`;
+            doc.text(footer, pageWidth - margin - doc.getTextWidth(footer), y + 14);
+          }
+
+          const fileName = `reporte_stock_critico_${new Date().toISOString().slice(0,10)}.pdf`;
+          doc.save(fileName);
+        } catch (err) {
+          console.error('Error generando PDF:', err);
+          showToast('No se pudo generar el PDF', 'error');
+        }
+      });
       document.getElementById('invCritXlsBtn')?.addEventListener('click', () => showToast('Exportacin Excel (Stock crtico)'));
       document.getElementById('invMovPdfBtn')?.addEventListener('click', () => showToast('Exportacin PDF (Movimientos)'));
       document.getElementById('invMovXlsBtn')?.addEventListener('click', () => showToast('Exportacin Excel (Movimientos)'));
 
       // Botones de 'Gráfica' — abren modal con pie chart de ejemplo
       document.getElementById('invCritChartBtn')?.addEventListener('click', () => {
-        const cat = (window.invCritFilter && window.invCritFilter.categoria && window.invCritFilter.categoria !== 'Todas')
-          ? `?categoria=${encodeURIComponent(window.invCritFilter.categoria)}`
-          : '';
-        fetch(`/api/reportes/inventario/resumen-estados${cat}`)
-          .then(r => r.json())
-          .then(payload => {
-            if (!payload || !payload.success) throw new Error(payload && payload.message || 'Error');
-            const arr = Array.isArray(payload.data) ? payload.data : [];
-            // Mapear estados a etiquetas/colores del pie
-            const map = {
-              'Stock': { label: 'En stock', color: '#3b82f6' },
-              'Stock bajo': { label: 'Bajo', color: '#a855f7' },
-              'Stock critico': { label: 'Crítico', color: '#22c55e' },
-              'Sin existencias': { label: 'Agotado', color: '#f59e0b' }
+        const catQ = (window.invCritFilter && window.invCritFilter.categoria && window.invCritFilter.categoria !== 'Todas')
+          ? `?categoria=${encodeURIComponent(window.invCritFilter.categoria)}` : '';
+        Promise.all([
+          // La primera gráfica (Estados) respeta el filtro de categoría
+          fetch(`/api/reportes/inventario/resumen-estados${catQ}`).then(r => r.json()),
+          // La segunda gráfica (Productos críticos) ignora el filtro de categoría
+          fetch(`/api/reportes/inventario/critico-list`).then(r => r.json())
+        ])
+        .then(([estadosPayload, critListPayload]) => {
+          if (!estadosPayload?.success) throw new Error(estadosPayload?.message || 'Error estados');
+          if (!critListPayload?.success) throw new Error(critListPayload?.message || 'Error críticos');
+
+          // Grafica 1: Estados
+          const arr = Array.isArray(estadosPayload.data) ? estadosPayload.data : [];
+          const map = {
+            'Stock': { label: 'En stock', color: '#3b82f6' },
+            'Stock bajo': { label: 'Bajo', color: '#a855f7' },
+            'Stock critico': { label: 'Crítico', color: '#22c55e' },
+            'Sin existencias': { label: 'Agotado', color: '#f59e0b' }
+          };
+          const order = ['Stock', 'Stock critico', 'Sin existencias', 'Stock bajo'];
+          const dsEstados = order
+            .map(k => {
+              const row = arr.find(x => String(x.estado).toLowerCase() === k.toLowerCase());
+              const total = row ? Number(row.total || 0) : 0;
+              return { label: map[k].label, value: total, color: map[k].color };
+            })
+            .filter(d => d.value > 0);
+          if (!dsEstados.length) dsEstados.push({ label: 'Sin datos', value: 1, color: '#64748b' });
+
+          // Grafica 2: Productos críticos (solo Cantidad 1..24), intensidad por menor stock
+          const items = Array.isArray(critListPayload.items) ? critListPayload.items : [];
+          // Orden ascendente por cantidad (menor stock primero)
+          items.sort((a,b) => (a.cantidad||0) - (b.cantidad||0));
+          const TOP = 8;
+          const topItems = items.slice(0, TOP);
+          const rest = items.slice(TOP);
+          const sumRest = rest.reduce((s, it) => s + (Number(it.cantidad)||0), 0);
+
+          // Escala de color: de rojo claro a rojo oscuro (#fecaca -> #b91c1c)
+          function lerp(a,b,t){ return a + (b-a)*t; }
+          function hslToHex(h, s, l){
+            h/=360; s/=100; l/=100;
+            const hue2rgb=(p,q,t)=>{ if(t<0) t+=1; if(t>1) t-=1; if(t<1/6) return p+(q-p)*6*t; if(t<1/2) return q; if(t<2/3) return p+(q-p)*(2/3 - t)*6; return p; };
+            const q = l < .5 ? l * (1 + s) : l + s - l*s; const p = 2*l - q;
+            const r = Math.round(hue2rgb(p,q,h+1/3)*255); const g = Math.round(hue2rgb(p,q,h)*255); const b = Math.round(hue2rgb(p,q,h-1/3)*255);
+            return `#${((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1)}`;
+          }
+          // Usar HSL rojo (0°) con luminancia decreciente según ranking
+          const dsCriticos = topItems.map((it, idx) => {
+            const rank = idx / Math.max(1, topItems.length - 1); // 0..1
+            const lightness = Math.round(80 - 40* (1 - rank)); // 80%->40% (más oscuro para menor stock)
+            const color = hslToHex(0, 75, lightness);
+            return {
+              label: `${it.codigo} (${it.cantidad})`,
+              value: Number(it.cantidad)||0,
+              color
             };
-            const order = ['Stock', 'Stock critico', 'Sin existencias', 'Stock bajo'];
-            const dataset = order
-              .map(k => {
-                const row = arr.find(x => String(x.estado).toLowerCase() === k.toLowerCase());
-                const total = row ? Number(row.total || 0) : 0;
-                return { label: map[k].label, value: total, color: map[k].color };
-              })
-              .filter(d => d.value > 0);
-            if (!dataset.length) dataset.push({ label: 'Sin datos', value: 1, color: '#64748b' });
-            openReportPieModal('Stock crítico', dataset);
-          })
-          .catch(() => {
-            // fallback en caso de error
-            const data = [
-              { label: 'En stock', value: 1 },
-              { label: 'Crítico', value: 1 },
-              { label: 'Agotado', value: 1 }
-            ];
-            openReportPieModal('Stock crítico', data);
           });
+          if (sumRest > 0) dsCriticos.push({ label: `Otros (${rest.length})`, value: sumRest, color: '#ef4444' });
+          if (!dsCriticos.length) dsCriticos.push({ label: 'Sin críticos', value: 1, color: '#94a3b8' });
+
+          // Construir contenido del modal con dos gráficas
+          const titleEl = document.getElementById('reportChartTitle');
+          if (titleEl) titleEl.innerHTML = '<i class="fas fa-chart-pie"></i> Gráficas de Inventario';
+          const body = document.querySelector('#reportChartModal .modal-body');
+          if (body) {
+            body.innerHTML = [
+              '<div class="pie-charts-grid">',
+              '  <article class="chart-card">',
+              '    <div class="card-header"><h3>Estados del inventario</h3></div>',
+              '    <div class="pie-chart-wrapper">',
+              '      <div class="pie-chart" id="repChartPie1"></div>',
+              '      <ul class="pie-legend" id="repChartLegend1"></ul>',
+              '    </div>',
+              '  </article>',
+              '  <article class="chart-card">',
+              '    <div class="card-header"><h3>Productos críticos (baja existencia)</h3></div>',
+              '    <div class="pie-chart-wrapper">',
+              '      <div class="pie-chart" id="repChartPie2"></div>',
+              '      <ul class="pie-legend" id="repChartLegend2"></ul>',
+              '    </div>',
+              '    <p class="card-subtitle" style="margin-top:12px; color:#64748b;">Más oscuro = menor stock. Ordenados por menor disponibilidad (sin filtrar por categoría).</p>',
+              '  </article>',
+              '</div>'
+            ].join('');
+          }
+          // Renderizar ambas
+          const pie1 = document.getElementById('repChartPie1');
+          const legend1 = document.getElementById('repChartLegend1');
+          const pie2 = document.getElementById('repChartPie2');
+          const legend2 = document.getElementById('repChartLegend2');
+          if (pie1 && legend1) renderPieChart(pie1, legend1, dsEstados, '');
+          if (pie2 && legend2) renderPieChart(pie2, legend2, dsCriticos, '');
+          modalManager.open('reportChartModal');
+        })
+        .catch(err => {
+          console.error('No se pudo cargar datos de gráfica:', err);
+          // Fallback a modal original con dataset vacío
+          openReportPieModal('Gráficas de inventario', []);
+        });
       });
       document.getElementById('invMovChartBtn')?.addEventListener('click', () => {
         const data = [

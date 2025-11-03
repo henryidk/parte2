@@ -272,6 +272,42 @@ app.get('/api/reportes/inventario/resumen-estados', async (req, res) => {
   }
 });
 
+// Lista completa de productos en stock crítico (para gráfica de críticos)
+app.get('/api/reportes/inventario/critico-list', async (req, res) => {
+  try {
+    const categoria = String(req.query.categoria || '').trim();
+    const pool = await getPool();
+
+    const whereParts = ['v.Cantidad > 0', 'v.Cantidad < 25'];
+    let filterSqlExists = '';
+    if (categoria) {
+      if (categoria.toLowerCase() === '__none__' || categoria.toLowerCase() === '__sin__' || categoria.toLowerCase() === 'sin categoría' || categoria.toLowerCase() === 'sin categoria') {
+        filterSqlExists = ` AND NOT EXISTS (SELECT 1 FROM inv.producto_categoria pc WHERE pc.IdProducto = v.IdProducto)`;
+      } else if (categoria.toLowerCase() !== 'todas') {
+        filterSqlExists = ` AND EXISTS (
+          SELECT 1 FROM inv.producto_categoria pc
+          JOIN inv.categorias c ON c.IdCategoria = pc.IdCategoria
+          WHERE pc.IdProducto = v.IdProducto
+            AND LOWER(CONVERT(VARCHAR(100), c.Nombre COLLATE Latin1_General_CI_AI)) = LOWER(CONVERT(VARCHAR(100), @cat COLLATE Latin1_General_CI_AI))
+        )`;
+      }
+    }
+
+    const rq = pool.request();
+    if (filterSqlExists.includes('@cat')) rq.input('cat', sql.VarChar(120), categoria);
+    const rows = (await rq.query(`
+      SELECT v.Codigo, v.Nombre, COALESCE(v.Categorias,'') AS Categorias, v.Cantidad
+      FROM inv.v_productos v
+      WHERE ${whereParts.join(' AND ')}${filterSqlExists}
+      ORDER BY v.Cantidad ASC, v.Nombre ASC
+    `)).recordset;
+    return res.json({ success: true, items: rows.map(r => ({ codigo: r.Codigo, nombre: r.Nombre, categorias: r.Categorias, cantidad: Number(r.Cantidad) })) });
+  } catch (err) {
+    console.error('Error en /api/reportes/inventario/critico-list:', err);
+    return res.status(500).json({ success: false, message: 'Error obteniendo lista de críticos' });
+  }
+});
+
 app.post('/api/login', verifyRecaptcha, async (req, res) => {
   try {
     const { usuario, password } = req.body;
