@@ -1,4 +1,4 @@
-�const { getPool: getDbPool, sql } = require('../db/pool');
+const { getPool: getDbPool, sql } = require('../db/pool');
 
 // Pool de BD centralizado en ../db/pool (getDbPool)
 
@@ -343,7 +343,7 @@ module.exports = { createProducto, listProductos, getProductoByCodigo, updatePro
 async function updateCategoria({ id, nombre, descripcion = '' }) {
   const p = await getDbPool();
   const catId = parseInt(id);
-  if (!catId) { const e = new Error('Id invalido'); e.code = 'NOT_FOUND'; throw e; }
+  if (!catId) { const e = new Error('Id inválido'); e.code = 'NOT_FOUND'; throw e; }
   const name = String(nombre || '').trim();
   const descr = String(descripcion || '').trim();
 
@@ -377,7 +377,7 @@ async function updateCategoria({ id, nombre, descripcion = '' }) {
 async function deleteCategoria(id) {
   const p = await getDbPool();
   const catId = parseInt(id);
-  if (!catId) { const e = new Error('Id invalido'); e.code = 'NOT_FOUND'; throw e; }
+  if (!catId) { const e = new Error('Id inválido'); e.code = 'NOT_FOUND'; throw e; }
   const ex = await p.request().input('Id', sql.Int, catId)
     .query('SELECT 1 FROM inv.categorias WHERE IdCategoria = @Id');
   if (ex.recordset.length === 0) { const e = new Error('Categoria no existe'); e.code = 'NOT_FOUND'; throw e; }
